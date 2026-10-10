@@ -21,12 +21,19 @@
 #include "RISCVConstantPoolValue.h"
 #include "RISCVMachineFunctionInfo.h"
 #include "RISCVRegisterInfo.h"
+#include "RISCVXReg.h"
 #include "TargetInfo/RISCVTargetInfo.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/Module.h"
@@ -40,6 +47,7 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/RISCVISAInfo.h"
 #include "llvm/Transforms/Instrumentation/HWAddressSanitizer.h"
@@ -90,6 +98,22 @@ public:
                        const char *ExtraCode, raw_ostream &OS) override;
   bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
                              const char *ExtraCode, raw_ostream &OS) override;
+
+  // xreg research extension (RISCVXReg.h, docs/infra/xreg-encoding.md).
+  std::unique_ptr<MCCodeEmitter> XRegEmitter;
+  int XRegPendingTag = -1; // category of the load/store being emitted
+  // Pre-instruction labels (e.g. the %pcrel_hi anchor of an AUIPC) of
+  // instructions that get a prefix: emitted after the prefix, so the label is
+  // the address of the instruction itself.
+  DenseMap<const MachineInstr *, MCSymbol *> XRegDeferredSyms;
+  MCSymbol *XRegPendingSym = nullptr;
+  SmallVector<std::pair<MCSymbol *, uint8_t>, 64> XRegTags;
+  bool xregHasExtended(const MCInst &Inst) const;
+  uint32_t xregEncode(const MCInst &Inst, const MCSubtargetInfo &STI) const;
+  void xregEmitPrefix(MCStreamer &S, const MCInst &Inst,
+                      const MCSubtargetInfo &STI);
+  uint8_t xregClassify(const MachineInstr &MI) const;
+  void xregEmitFunctionTables(const MachineFunction &MF);
 
   // Returns whether Inst is compressed.
   bool EmitToStreamer(MCStreamer &S, const MCInst &Inst,
@@ -265,6 +289,27 @@ void RISCVAsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
 
 bool RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst,
                                      const MCSubtargetInfo &SubtargetInfo) {
+  // xreg: an instruction using x32..x255 gets an xpfx in front and is never
+  // compressed. A pending load/store tag labels the instruction itself (after
+  // the prefix), so the tag's address is the address Spike counts.
+  bool Extended = xregHasExtended(Inst);
+  if (Extended)
+    xregEmitPrefix(S, Inst, SubtargetInfo);
+  if (XRegPendingSym) {
+    S.emitLabel(XRegPendingSym);
+    XRegPendingSym = nullptr;
+  }
+  if (XRegPendingTag >= 0) {
+    MCSymbol *Sym = OutContext.createTempSymbol("xregtag");
+    S.emitLabel(Sym);
+    XRegTags.push_back({Sym, (uint8_t)XRegPendingTag});
+    XRegPendingTag = -1;
+  }
+  if (Extended) {
+    S.emitInstruction(Inst, SubtargetInfo);
+    return false;
+  }
+
   MCInst CInst;
   bool Res = RISCVRVC::compress(CInst, Inst, SubtargetInfo);
   if (Res)
@@ -381,6 +426,15 @@ void RISCVAsmPrinter::emitInstruction(const MachineInstr *MI) {
   RISCV_MC::verifyInstructionPredicates(MI->getOpcode(), STI->getFeatureBits());
 
   emitNTLHint(MI);
+
+  // xreg: deferred pre-instruction label (see XRegDeferredSyms).
+  XRegPendingSym = XRegDeferredSyms.lookup(MI);
+
+  // xreg: classify loads/stores for the .xreg_memtags section.
+  XRegPendingTag = -1;
+  if (RISCVXReg::emitTags() && !MI->isMetaInstruction() &&
+      (MI->mayLoad() || MI->mayStore()))
+    XRegPendingTag = xregClassify(*MI);
 
   // Do any auto-generated pseudo lowerings.
   if (MCInst OutInst; lowerPseudoInstExpansion(MI, OutInst)) {
@@ -556,13 +610,204 @@ void RISCVAsmPrinter::emitTargetFeaturePop(const MCSubtargetInfo &STI,
     getTargetStreamer().emitDirectiveOptionPop();
 }
 
+//===----------------------------------------------------------------------===//
+// xreg research extension
+//===----------------------------------------------------------------------===//
+
+// Memory-tag categories (docs/infra/metrics.md). Low 4 bits: category;
+// bit 4: load; bit 5: store.
+enum XRegTagCat : uint8_t {
+  XRegSpill = 1,
+  XRegReload = 2,
+  XRegCSave = 3,
+  XRegCRestore = 4,
+  XRegStack = 5,
+  XRegProg = 6
+};
+
+static bool isXRegFamily(MCRegister R, MCRegister First, unsigned N = 256) {
+  return R >= First && R < MCRegister(First + N);
+}
+
+bool RISCVAsmPrinter::xregHasExtended(const MCInst &Inst) const {
+  const MCRegisterInfo &MRI = *OutContext.getRegisterInfo();
+  for (const MCOperand &Op : Inst)
+    if (Op.isReg() && RISCVXReg::isExtendedGPR(Op.getReg(), MRI))
+      return true;
+  return false;
+}
+
+uint32_t RISCVAsmPrinter::xregEncode(const MCInst &Inst,
+                                     const MCSubtargetInfo &STI) const {
+  SmallVector<char, 8> CB;
+  SmallVector<MCFixup, 2> Fixups;
+  XRegEmitter->encodeInstruction(Inst, CB, Fixups, STI);
+  if (CB.size() != 4)
+    report_fatal_error("xreg: extended register in a non-32-bit instruction");
+  return support::endian::read32le(CB.data());
+}
+
+// Find which encoding field (rd/rs1/rs2/rs3) each extended-register operand
+// lands in by encoding the instruction with that operand set to x0 and x31,
+// then emit "xpfx rdh, rs1h, rs2h, rs3h".
+void RISCVAsmPrinter::xregEmitPrefix(MCStreamer &S, const MCInst &Inst,
+                                     const MCSubtargetInfo &STI) {
+  const MCRegisterInfo &MRI = *OutContext.getRegisterInfo();
+  const MCInstrDesc &Desc = TM.getMCInstrInfo()->get(Inst.getOpcode());
+  StringRef Name = TM.getMCInstrInfo()->getName(Inst.getOpcode());
+  if (Desc.isPseudo() || Desc.getSize() != 4)
+    report_fatal_error("xreg: extended register in pseudo or non-32-bit "
+                       "instruction " + Name);
+  static const uint32_t FieldMask[4] = {0x1fu << 7, 0x1fu << 15, 0x1fu << 20,
+                                        0x1fu << 27};
+  unsigned Hi[4] = {0, 0, 0, 0};
+  bool Set[4] = {false, false, false, false};
+  for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
+    const MCOperand &Op = Inst.getOperand(I);
+    if (!Op.isReg() || !RISCVXReg::isExtendedGPR(Op.getReg(), MRI))
+      continue;
+    MCRegister R = Op.getReg();
+    MCRegister Lo, HiReg;
+    if (isXRegFamily(R, RISCV::X0)) {
+      Lo = RISCV::X0;
+      HiReg = RISCV::X31;
+    } else if (isXRegFamily(R, RISCV::X0_W)) {
+      Lo = RISCV::X0_W;
+      HiReg = RISCV::X31_W;
+    } else {
+      Lo = RISCV::X0_H;
+      HiReg = RISCV::X31_H;
+    }
+    MCInst A = Inst, B = Inst;
+    A.getOperand(I).setReg(Lo);
+    B.getOperand(I).setReg(HiReg);
+    uint32_t Diff = xregEncode(A, STI) ^ xregEncode(B, STI);
+    int Field = -1;
+    for (int F = 0; F < 4; ++F)
+      if (Diff == FieldMask[F])
+        Field = F;
+    if (Field < 0)
+      report_fatal_error("xreg: cannot locate register field of operand " +
+                         Twine(I) + " in " + Name);
+    unsigned H = MRI.getEncodingValue(R) >> 5;
+    if (Set[Field] && Hi[Field] != H)
+      report_fatal_error("xreg: conflicting prefix bits for one field in " +
+                         Name);
+    Hi[Field] = H;
+    Set[Field] = true;
+  }
+  MCInst Pfx = MCInstBuilder(RISCV::XPFX)
+                   .addImm(Hi[0])
+                   .addImm(Hi[1])
+                   .addImm(Hi[2])
+                   .addImm(Hi[3]);
+  S.emitInstruction(Pfx, STI);
+}
+
+uint8_t RISCVAsmPrinter::xregClassify(const MachineInstr &MI) const {
+  bool L = MI.mayLoad(), St = MI.mayStore();
+  uint8_t Flags = (L ? 0x10 : 0) | (St ? 0x20 : 0);
+  if (MI.getFlag(MachineInstr::FrameSetup) && St && !L)
+    return XRegCSave | Flags;
+  if (MI.getFlag(MachineInstr::FrameDestroy) && L && !St)
+    return XRegCRestore | Flags;
+  const MachineFrameInfo &MFI = MI.getMF()->getFrameInfo();
+  for (const MachineMemOperand *MMO : MI.memoperands()) {
+    if (const PseudoSourceValue *PSV = MMO->getPseudoValue()) {
+      if (const auto *FS = dyn_cast<FixedStackPseudoSourceValue>(PSV)) {
+        if (MFI.isSpillSlotObjectIndex(FS->getFrameIndex()))
+          return (St ? XRegSpill : XRegReload) | Flags;
+        return XRegStack | Flags;
+      }
+      if (PSV->isStack())
+        return XRegStack | Flags;
+      continue;
+    }
+    if (const Value *V = MMO->getValue())
+      if (isa<AllocaInst>(getUnderlyingObject(V)))
+        return XRegStack | Flags;
+  }
+  // No usable memory operand: accesses based on sp/fp are stack traffic.
+  if (MI.memoperands_empty())
+    for (const MachineOperand &MO : MI.uses())
+      if (MO.isReg() && (MO.getReg() == RISCV::X2 || MO.getReg() == RISCV::X8))
+        return XRegStack | Flags;
+  return XRegProg | Flags;
+}
+
+// Emit the per-function measurement tables (docs/infra/metrics.md):
+//   .xreg_memtags: 16-byte records {u64 address, u64 category}
+//   .xreg_fnstats: one text line per function
+void RISCVAsmPrinter::xregEmitFunctionTables(const MachineFunction &MF) {
+  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  unsigned MaxReg = 0;
+  SmallSet<unsigned, 32> Extended;
+  unsigned Count[7] = {0, 0, 0, 0, 0, 0, 0};
+  for (const MachineBasicBlock &MBB : MF)
+    for (const MachineInstr &MI : MBB) {
+      if (MI.isMetaInstruction())
+        continue;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (!MO.isReg() || !MO.getReg().isPhysical())
+          continue;
+        MCRegister R = MO.getReg().asMCReg();
+        if (!isXRegFamily(R, RISCV::X0) && !isXRegFamily(R, RISCV::X0_W) &&
+            !isXRegFamily(R, RISCV::X0_H))
+          continue;
+        unsigned Enc = TRI->getEncodingValue(R);
+        MaxReg = std::max(MaxReg, Enc);
+        if (Enc >= 32)
+          Extended.insert(Enc);
+      }
+      if (MI.mayLoad() || MI.mayStore())
+        ++Count[xregClassify(MI) & 0xf];
+    }
+
+  MCSection *Tags = OutContext.getELFSection(".xreg_memtags",
+                                             ELF::SHT_PROGBITS, 0);
+  MCSection *Stats = OutContext.getELFSection(".xreg_fnstats",
+                                              ELF::SHT_PROGBITS, 0);
+  OutStreamer->pushSection();
+  OutStreamer->switchSection(Tags);
+  for (auto &[Sym, Cat] : XRegTags) {
+    OutStreamer->emitSymbolValue(Sym, 8);
+    OutStreamer->emitIntValue(Cat, 8);
+  }
+  OutStreamer->switchSection(Stats);
+  std::string Line;
+  raw_string_ostream OS(Line);
+  OS << MF.getName() << " max_reg=" << MaxReg
+     << " extra_regs=" << Extended.size() << " spill=" << Count[XRegSpill]
+     << " reload=" << Count[XRegReload] << " csave=" << Count[XRegCSave]
+     << " crestore=" << Count[XRegCRestore] << " stack=" << Count[XRegStack]
+     << " prog=" << Count[XRegProg]
+     << " ncsr=" << MF.getFrameInfo().getCalleeSavedInfo().size() << "\n";
+  OutStreamer->emitBytes(Line);
+  OutStreamer->popSection();
+  XRegTags.clear();
+}
+
 bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   STI = &MF.getSubtarget<RISCVSubtarget>();
 
   bool EmittedOptionArch = emitTargetFeaturePush(*STI);
 
   SetupMachineFunction(MF);
+  if (!XRegEmitter)
+    XRegEmitter.reset(TM.getTarget().createMCCodeEmitter(*TM.getMCInstrInfo(),
+                                                         OutContext));
+  XRegTags.clear();
+  XRegDeferredSyms.clear();
+  for (MachineBasicBlock &MBB : MF)
+    for (MachineInstr &MI : MBB)
+      if (MCSymbol *Sym = MI.getPreInstrSymbol())
+        if (RISCVXReg::needsPrefix(MI, *OutContext.getRegisterInfo())) {
+          XRegDeferredSyms[&MI] = Sym;
+          MI.setPreInstrSymbol(MF, nullptr);
+        }
   emitFunctionBody();
+  if (RISCVXReg::emitTags())
+    xregEmitFunctionTables(MF);
 
   // Emit the XRay table
   emitXRayTable();

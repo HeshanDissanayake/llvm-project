@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RISCVRegisterInfo.h"
+#include "RISCVXReg.h"
 #include "RISCV.h"
 #include "RISCVSubtarget.h"
 #include "llvm/ADT/SmallSet.h"
@@ -39,6 +40,9 @@ static cl::opt<bool>
 
 static_assert(RISCV::X1 == RISCV::X0 + 1, "Register list not consecutive");
 static_assert(RISCV::X31 == RISCV::X0 + 31, "Register list not consecutive");
+static_assert(RISCV::X255 == RISCV::X0 + 255, "xreg: register list not consecutive");
+static_assert(RISCV::X255_H == RISCV::X0_H + 255, "xreg: register list not consecutive");
+static_assert(RISCV::X255_W == RISCV::X0_W + 255, "xreg: register list not consecutive");
 static_assert(RISCV::F1_H == RISCV::F0_H + 1, "Register list not consecutive");
 static_assert(RISCV::F31_H == RISCV::F0_H + 31,
               "Register list not consecutive");
@@ -170,6 +174,21 @@ RISCVRegisterInfo::getRegClassForTypeOnBank(LLT Ty, const RegisterBank &RB,
   return nullptr;
 }
 
+unsigned RISCVRegisterInfo::getRegPressureSetLimitForHeuristics(
+    const MachineFunction &MF, unsigned Idx) const {
+  unsigned Limit = getRegPressureSetLimit(MF, Idx);
+  // Visible extended registers: none by default (stock behaviour); x32..x(N-1)
+  // with -riscv-xreg-pressure-hint (hypothesis H3).
+  unsigned FirstHidden = RISCVXReg::pressureHint() ? RISCVXReg::getNumGPRs() : 32;
+  unsigned Hidden = 0;
+  for (unsigned I = FirstHidden; I < 256; ++I)
+    for (MCRegUnit U : regunits(MCRegister(RISCV::X0 + I)))
+      for (const int *PS = getRegUnitPressureSets(U); *PS != -1; ++PS)
+        if ((unsigned)*PS == Idx)
+          Hidden += getRegUnitWeight(U);
+  return Limit > Hidden ? Limit - Hidden : 1;
+}
+
 BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   const RISCVFrameLowering *TFI = getFrameLowering(MF);
   BitVector Reserved(getNumRegs());
@@ -203,6 +222,10 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Additionally reserve dummy register used to form the register pair
   // beginning with 'x0' for instructions that take register pairs.
   markSuperRegs(Reserved, RISCV::DUMMY_REG_PAIR_WITH_X0);
+
+  // xreg: only x0..x(N-1) are allocatable (-riscv-num-gprs, default 32).
+  for (unsigned I = RISCVXReg::getNumGPRs(); I < 256; ++I)
+    markSuperRegs(Reserved, RISCV::X0_H + I);
 
   // There are only 16 GPRs for RVE.
   if (Subtarget.hasStdExtE())

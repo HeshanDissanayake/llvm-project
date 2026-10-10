@@ -86,6 +86,11 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
   const MCPhysReg *getIPRACSRegs(const MachineFunction *MF) const override;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
+
+  // xreg: hide x32..x255 (or those >= N with -riscv-xreg-pressure-hint) from
+  // the raw pressure-set limit used by MachineLICM/MachineSink.
+  unsigned getRegPressureSetLimitForHeuristics(const MachineFunction &MF,
+                                               unsigned Idx) const override;
   bool isAsmClobberable(const MachineFunction &MF,
                         MCRegister PhysReg) const override;
 

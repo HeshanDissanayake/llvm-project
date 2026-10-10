@@ -396,7 +396,7 @@ bool MachineLICMImpl::run(MachineFunction &MF) {
     llvm::fill(RegPressure, 0);
     RegLimit.resize(NumRPS);
     for (unsigned i = 0, e = NumRPS; i != e; ++i)
-      RegLimit[i] = TRI->getRegPressureSetLimit(MF, i);
+      RegLimit[i] = TRI->getRegPressureSetLimitForHeuristics(MF, i);
   }
 
   if (HoistConstLoads)

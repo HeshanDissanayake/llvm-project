@@ -16,6 +16,7 @@
 #include "RISCV.h"
 #include "RISCVMachineFunctionInfo.h"
 #include "RISCVSubtarget.h"
+#include "RISCVXReg.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -1980,6 +1981,15 @@ RISCVInstrInfo::optimizeSelect(MachineInstr &MI,
 }
 
 unsigned RISCVInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  unsigned Size = getInstSizeInBytesNoXReg(MI);
+  // xreg: an instruction that uses x32..x255 is preceded by a 4-byte xpfx.
+  if (Size && RISCVXReg::needsPrefix(MI, RegInfo))
+    Size += 4;
+  return Size;
+}
+
+unsigned
+RISCVInstrInfo::getInstSizeInBytesNoXReg(const MachineInstr &MI) const {
   if (MI.isMetaInstruction())
     return 0;
 

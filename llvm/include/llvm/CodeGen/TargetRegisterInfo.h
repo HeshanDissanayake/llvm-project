@@ -785,6 +785,16 @@ public:
   virtual unsigned getRegPressureSetLimit(const MachineFunction &MF,
                                           unsigned Idx) const = 0;
 
+  /// Pressure-set limit used by heuristics that read the raw limit directly
+  /// (MachineLICM, MachineSink) instead of going through RegisterClassInfo.
+  /// Defaults to getRegPressureSetLimit(). (Added for the RISC-V xreg research
+  /// extension, whose extra registers must not raise these limits unless
+  /// asked to.)
+  virtual unsigned getRegPressureSetLimitForHeuristics(const MachineFunction &MF,
+                                                       unsigned Idx) const {
+    return getRegPressureSetLimit(MF, Idx);
+  }
+
   /// Get the dimensions of register pressure impacted by this register class.
   /// Returns a -1 terminated array of pressure set IDs.
   virtual const int *getRegClassPressureSets(

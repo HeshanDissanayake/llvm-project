@@ -147,6 +147,7 @@ public:
               bool DstRenamable = false, bool DstIsDead = false) const;
 
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
+  unsigned getInstSizeInBytesNoXReg(const MachineInstr &MI) const;
 
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,

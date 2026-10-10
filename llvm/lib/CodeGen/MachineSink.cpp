@@ -1259,7 +1259,7 @@ bool MachineSinking::registerPressureExceedsLimit(
 
   for (unsigned PS = 0; PS < BBRegisterPressure.size(); ++PS) {
     if (BBRegisterPressure[PS] >=
-        TRI->getRegPressureSetLimit(*MBB.getParent(), PS)) {
+        TRI->getRegPressureSetLimitForHeuristics(*MBB.getParent(), PS)) {
       return true;
     }
   }

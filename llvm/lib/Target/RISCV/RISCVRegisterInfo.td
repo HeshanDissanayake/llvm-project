@@ -222,6 +222,30 @@ let RegAltNameIndices = [ABIRegAltName] in {
   def X31 : RISCVRegWithSubRegs<31,"x31", [X31_W], ["t6"]>, DwarfRegNum<[31]>;
   }
   }
+
+  // xreg research extension (LLVM-regsw docs/infra/xreg-encoding.md):
+  // x32..x255, reached through the xpfx prefix. Caller-saved. They are
+  // reserved (never allocated) unless -riscv-num-gprs > 32.
+  foreach I = 32-255 in {
+    def X#I#_H : Register<"x"#I> {
+      let Namespace = "RISCV";
+      let HWEncoding = I;
+      let AltNames = ["x"#I];
+    }
+    def X#I#_W : RegisterWithSubRegs<"x"#I, [!cast<Register>("X"#I#"_H")]> {
+      let Namespace = "RISCV";
+      let HWEncoding = I;
+      let AltNames = ["x"#I];
+      let SubRegIndices = [sub_16];
+    }
+    def X#I : RegisterWithSubRegs<"x"#I, [!cast<Register>("X"#I#"_W")]>,
+              DwarfRegNum<[!add(3072, I)]> {
+      let Namespace = "RISCV";
+      let HWEncoding = I;
+      let AltNames = ["x"#I];
+      let SubRegIndices = [sub_32];
+    }
+  }
   // CHERI capability registers (Y extension)
   let SubRegIndices = [sub_cap_addr] in {
   let isConstant = true in
@@ -317,6 +341,9 @@ class GPRRegisterClass<dag regList>
 def GPR : GPRRegisterClass<(add (sequence "X%u", 10, 17),
                                 (sequence "X%u", 5, 7),
                                 (sequence "X%u", 28, 31),
+                                // xreg: caller-saved x32..x255 (reserved
+                                // unless -riscv-num-gprs > 32)
+                                (sequence "X%u", 32, 255),
                                 (sequence "X%u", 8, 9),
                                 (sequence "X%u", 18, 27),
                                 (sequence "X%u", 0, 4))>;

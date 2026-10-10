@@ -1917,6 +1917,12 @@ MCRegister RISCVAsmParser::matchRegisterNameHelper(StringRef Name) const {
     Reg = MatchRegisterAltName(Name);
   if (isRVE() && Reg >= RISCV::X16 && Reg <= RISCV::X31)
     Reg = MCRegister();
+  // xreg research extension: x32..x255 exist only with +xreg.
+  if (!getSTI().hasFeature(RISCV::FeatureVendorXReg) &&
+      ((Reg >= RISCV::X32 && Reg <= RISCV::X255) ||
+       (Reg >= RISCV::X32_W && Reg <= RISCV::X255_W) ||
+       (Reg >= RISCV::X32_H && Reg <= RISCV::X255_H)))
+    Reg = MCRegister();
   return Reg;
 }
 

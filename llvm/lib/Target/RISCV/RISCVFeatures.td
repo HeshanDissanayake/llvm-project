@@ -1620,6 +1620,16 @@ def HasVendorXwchc
       AssemblerPredicate<(all_of FeatureVendorXwchc),
                          "'Xwchc' (WCH/QingKe additional compressed opcodes)">;
 
+// xreg research extension (LLVM-regsw docs/infra/xreg-encoding.md): 256
+// integer registers reached through the xpfx prefix. Enables the assembler
+// syntax (x32..x255, xpfx); code generation is controlled by -riscv-num-gprs.
+def FeatureVendorXReg
+    : RISCVExtension<0, 1, "Research: 256 Integer Registers via xpfx Prefix">;
+def HasVendorXReg
+    : Predicate<"Subtarget->hasVendorXReg()">,
+      AssemblerPredicate<(all_of FeatureVendorXReg),
+                         "'XReg' (Research: 256 Integer Registers via xpfx Prefix)">;
+
 // Qualcomm Extensions
 
 def FeatureVendorXqccmp
