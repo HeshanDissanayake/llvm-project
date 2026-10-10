@@ -1,0 +1,14 @@
+# RUN: llvm-mc --disassemble -triple=riscv64 -mattr=+xregsw -M no-aliases %s \
+# RUN:     | FileCheck --check-prefix=CHECK-XREGSW %s
+# RUN: llvm-mc --disassemble -triple=riscv64 %s 2>&1 \
+# RUN:     | FileCheck --check-prefix=CHECK-NOEXT %s
+
+# The regsw encodings only decode when the XRegsw extension is enabled.
+
+# CHECK-XREGSW: regsw_c s1, 2047(t5)
+# CHECK-NOEXT: warning: invalid instruction encoding
+0xa3 0x4f 0x9f 0x7e
+
+# CHECK-XREGSW: regsw t0, t1, t2
+# CHECK-NOEXT: warning: invalid instruction encoding
+0xeb 0x02 0x73 0x02

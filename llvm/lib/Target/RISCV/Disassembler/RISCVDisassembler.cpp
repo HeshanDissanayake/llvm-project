@@ -551,6 +551,7 @@ static constexpr DecoderListEntry DecoderList32[]{
     {DecoderTableXAndes32, XAndesGroup, "Andes extensions"},
     {DecoderTableXSMT32, XSMTGroup, "SpacemiT extensions"},
     {DecoderTableXAIF32, XAIFGroup, "AI Foundry extensions"},
+    {DecoderTableXRegsw32, {RISCV::FeatureVendorXRegsw}, "regsw extension"},
     // Standard Extensions
     {DecoderTable32, {}, "standard 32-bit instructions"},
     {DecoderTableRV32Only32, {}, "RV32-only standard 32-bit instructions"},

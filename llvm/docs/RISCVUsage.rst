@@ -491,6 +491,9 @@ The current vendor extensions supported are:
 ``Xwchc``
   LLVM implements `the custom compressed opcodes present in some QingKe cores` by WCH / Nanjing Qinheng Microelectronics. The vendor refers to these opcodes by the name "XW".
 
+``XRegsw``
+  LLVM implements assembler and disassembler support (no code generation) for version 0.1 of the register-bank switching research extension implemented by the regsw forks of Spike and CVA6. ``regsw_c rs2, imm(rs1)`` loads a 21-bit bank configuration that selects the register bank of the operands of the following seven instructions; ``regsw rd, rs1, rs2`` is recognised by the Spike fork only.
+
 ``Xqccmp``
   LLVM implements `version 0.3 of the 16-bit Push/Pop instructions and double-moves extension specification <https://github.com/quic/riscv-unified-db/releases/tag/Xqccmp_extension-0.3.0>`__ by Qualcomm. All instructions are prefixed with `qc.` as described in the specification.
 

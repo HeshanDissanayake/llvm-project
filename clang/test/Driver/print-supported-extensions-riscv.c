@@ -203,6 +203,7 @@
 // CHECK-NEXT:     xqcisim              0.2       'Xqcisim' (Qualcomm uC Simulation Hint Extension)
 // CHECK-NEXT:     xqcisls              0.2       'Xqcisls' (Qualcomm uC Scaled Load Store Extension)
 // CHECK-NEXT:     xqcisync             0.3       'Xqcisync' (Qualcomm uC Sync Delay Extension)
+// CHECK-NEXT:     xregsw               0.1       'XRegsw' (Register-Bank Switching Instructions)
 // CHECK-NEXT:     xsfcease             1.0       'XSfcease' (SiFive sf.cease Instruction)
 // CHECK-NEXT:     xsfmm128t            0.6       'XSfmm128t' (TE=128 configuration)
 // CHECK-NEXT:     xsfmm16t             0.6       'XSfmm16t' (TE=16 configuration)

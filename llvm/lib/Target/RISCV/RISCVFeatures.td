@@ -1620,6 +1620,15 @@ def HasVendorXwchc
       AssemblerPredicate<(all_of FeatureVendorXwchc),
                          "'Xwchc' (WCH/QingKe additional compressed opcodes)">;
 
+// Register-bank switching (regsw research extension; Spike/CVA6 regsw forks)
+
+def FeatureVendorXRegsw
+    : RISCVExtension<0, 1, "Register-Bank Switching Instructions">;
+def HasVendorXRegsw
+    : Predicate<"Subtarget->hasVendorXRegsw()">,
+      AssemblerPredicate<(all_of FeatureVendorXRegsw),
+                         "'XRegsw' (Register-Bank Switching Instructions)">;
+
 // Qualcomm Extensions
 
 def FeatureVendorXqccmp
