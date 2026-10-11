@@ -26,6 +26,10 @@ namespace RISCVXReg {
 /// 32 means stock behaviour: x32..x255 are reserved.
 unsigned getNumGPRs();
 
+/// H2: number K of extra registers x(N-K)..x(N-1) that are callee-saved
+/// (-riscv-xreg-callee-saved; default 0 = all extras caller-saved, D7).
+unsigned getNumCalleeSavedExtra();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 

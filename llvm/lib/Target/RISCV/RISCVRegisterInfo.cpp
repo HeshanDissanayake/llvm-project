@@ -24,6 +24,9 @@
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <map>
+#include <mutex>
+#include <vector>
 
 #define GET_REGINFO_TARGET_DESC
 #include "RISCVGenRegisterInfo.inc"
@@ -67,8 +70,7 @@ RISCVRegisterInfo::getIPRACSRegs(const MachineFunction *MF) const {
   return CSR_IPRA_SaveList;
 }
 
-const MCPhysReg *
-RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+static const MCPhysReg *getCalleeSavedRegsBase(const MachineFunction *MF) {
   auto &Subtarget = MF->getSubtarget<RISCVSubtarget>();
   if (MF->getFunction().getCallingConv() == CallingConv::GHC)
     return CSR_NoRegs_SaveList;
@@ -909,9 +911,8 @@ StringRef RISCVRegisterInfo::getRegAsmName(MCRegister Reg) const {
   return TargetRegisterInfo::getRegAsmName(Reg);
 }
 
-const uint32_t *
-RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
-                                        CallingConv::ID CC) const {
+static const uint32_t *getCallPreservedMaskBase(const MachineFunction &MF,
+                                               CallingConv::ID CC) {
   auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
 
   if (CC == CallingConv::GHC)
@@ -944,6 +945,57 @@ RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
       return CSR_ILP32D_LP64D_V_RegMask;
     return CSR_ILP32D_LP64D_RegMask;
   }
+}
+
+// xreg (H2): -riscv-xreg-callee-saved=K makes x(N-K)..x(N-1) callee-saved.
+// They are appended to the standard save lists and call-preserved masks; the
+// GHC (no CSRs) and interrupt conventions are left unchanged. The extended
+// lists are built once per base list and cached (the options are fixed for
+// the lifetime of the process).
+static bool xregExtendsCC(const MachineFunction &MF, CallingConv::ID CC) {
+  return RISCVXReg::getNumCalleeSavedExtra() && CC != CallingConv::GHC &&
+         !MF.getFunction().hasFnAttribute("interrupt");
+}
+
+const MCPhysReg *
+RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  const MCPhysReg *Base = getCalleeSavedRegsBase(MF);
+  if (!xregExtendsCC(*MF, MF->getFunction().getCallingConv()))
+    return Base;
+  static std::mutex Lock;
+  static std::map<const MCPhysReg *, std::vector<MCPhysReg>> Cache;
+  std::lock_guard<std::mutex> Guard(Lock);
+  std::vector<MCPhysReg> &L = Cache[Base];
+  if (L.empty()) {
+    for (const MCPhysReg *R = Base; *R; ++R)
+      L.push_back(*R);
+    unsigned N = RISCVXReg::getNumGPRs(), K = RISCVXReg::getNumCalleeSavedExtra();
+    for (unsigned I = N - K; I < N; ++I)
+      L.push_back(RISCV::X0 + I);
+    L.push_back(0);
+  }
+  return L.data();
+}
+
+const uint32_t *
+RISCVRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
+                                        CallingConv::ID CC) const {
+  const uint32_t *Base = getCallPreservedMaskBase(MF, CC);
+  if (!xregExtendsCC(MF, CC))
+    return Base;
+  static std::mutex Lock;
+  static std::map<const uint32_t *, std::vector<uint32_t>> Cache;
+  std::lock_guard<std::mutex> Guard(Lock);
+  std::vector<uint32_t> &M = Cache[Base];
+  if (M.empty()) {
+    M.assign(Base, Base + MachineOperand::getRegMaskSize(getNumRegs()));
+    unsigned N = RISCVXReg::getNumGPRs(), K = RISCVXReg::getNumCalleeSavedExtra();
+    for (unsigned I = N - K; I < N; ++I)
+      for (MCPhysReg R : {MCPhysReg(RISCV::X0 + I), MCPhysReg(RISCV::X0_W + I),
+                          MCPhysReg(RISCV::X0_H + I)})
+        M[R / 32] |= 1u << (R % 32);
+  }
+  return M.data();
 }
 
 const TargetRegisterClass *

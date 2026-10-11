@@ -35,6 +35,17 @@ static cl::opt<bool> XRegPressureHint(
     cl::desc("xreg (H3): let MachineLICM/MachineSink pressure limits include "
              "x32..x(N-1)"));
 
+static cl::opt<unsigned> XRegCalleeSaved(
+    "riscv-xreg-callee-saved", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H2): make the top K extra registers x(N-K)..x(N-1) "
+             "callee-saved (default 0)"));
+
+unsigned RISCVXReg::getNumCalleeSavedExtra() {
+  if (XRegCalleeSaved > getNumGPRs() - 32)
+    report_fatal_error("-riscv-xreg-callee-saved must be <= riscv-num-gprs - 32");
+  return XRegCalleeSaved;
+}
+
 bool RISCVXReg::emitTags() { return EmitXRegTags; }
 bool RISCVXReg::pressureHint() { return XRegPressureHint; }
 
