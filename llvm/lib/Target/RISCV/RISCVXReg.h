@@ -53,6 +53,9 @@ ArrayRef<std::string> getGlobalRegNames();
 /// (-riscv-xreg-unj-max) and register budget in percent of N
 /// (-riscv-xreg-unj-budget).
 bool unrollAndJamAuto();
+/// H4c.1: prefer factors leaving <= 1/8 of a known trip count as remainder
+/// (-riscv-xreg-unj-tripaware, default on).
+bool unrollAndJamTripAware();
 unsigned getUnrollAndJamMax();
 unsigned getUnrollAndJamBudgetPercent();
 

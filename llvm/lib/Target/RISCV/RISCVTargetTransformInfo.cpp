@@ -2987,11 +2987,23 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
   if (Budget <= Base)
     return 0;
   unsigned U = std::min(RISCVXReg::getUnrollAndJamMax(), (Budget - Base) / Dup);
+  // H4c.1: with a known outer trip count, take the largest factor that
+  // leaves at most 1/8 of the iterations to the un-jammed remainder.
+  unsigned TC = SE.getSmallConstantTripCount(L);
+  unsigned Chosen = U;
+  if (TC && RISCVXReg::unrollAndJamTripAware()) {
+    Chosen = 0;
+    for (unsigned C = std::min(U, TC); C >= 2; --C)
+      if ((TC % C) * 8 <= TC) {
+        Chosen = C;
+        break;
+      }
+  }
   LLVM_DEBUG(dbgs() << "xreg-unj-auto: " << L->getHeader()->getName()
                     << " shared=" << Shared << " dup=" << Dup << " outside="
-                    << Outside << " N=" << N << " -> U=" << (U < 2 ? 0 : U)
-                    << "\n");
-  return U < 2 ? 0 : U;
+                    << Outside << " N=" << N << " TC=" << TC << " budget U=" << U
+                    << " -> U=" << (Chosen < 2 ? 0 : Chosen) << "\n");
+  return Chosen < 2 ? 0 : Chosen;
 }
 
 void RISCVTTIImpl::getUnrollingPreferences(

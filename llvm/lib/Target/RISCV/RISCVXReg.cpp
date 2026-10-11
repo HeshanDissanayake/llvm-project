@@ -79,7 +79,13 @@ static cl::opt<unsigned> XRegUnJBudget(
     "riscv-xreg-unj-budget", cl::Hidden, cl::init(75),
     cl::desc("xreg (H4c): register budget for unroll-and-jam, percent of N"));
 
+static cl::opt<bool> XRegUnJTripAware(
+    "riscv-xreg-unj-tripaware", cl::Hidden, cl::init(true),
+    cl::desc("xreg (H4c.1): with -riscv-xreg-unj-auto, prefer factors that "
+             "leave <= 1/8 of a known outer trip count to the remainder"));
+
 bool RISCVXReg::unrollAndJamAuto() { return XRegUnJAuto; }
+bool RISCVXReg::unrollAndJamTripAware() { return XRegUnJTripAware; }
 unsigned RISCVXReg::getUnrollAndJamMax() { return XRegUnJMax; }
 unsigned RISCVXReg::getUnrollAndJamBudgetPercent() { return XRegUnJBudget; }
 
