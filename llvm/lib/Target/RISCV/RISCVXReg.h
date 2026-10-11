@@ -49,6 +49,13 @@ bool scalarRepl();
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
 
+/// H4c: register-aware unroll-and-jam (-riscv-xreg-unj-auto), maximum count
+/// (-riscv-xreg-unj-max) and register budget in percent of N
+/// (-riscv-xreg-unj-budget).
+bool unrollAndJamAuto();
+unsigned getUnrollAndJamMax();
+unsigned getUnrollAndJamBudgetPercent();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 

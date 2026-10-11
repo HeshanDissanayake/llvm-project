@@ -8,6 +8,8 @@
 
 #include "RISCVTargetTransformInfo.h"
 #include "RISCVXReg.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "MCTargetDesc/RISCVMatInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -2928,12 +2930,83 @@ InstructionCost RISCVTTIImpl::getPointersChainCost(
   return Cost;
 }
 
+// xreg (H4c): choose an unroll-and-jam count for outer loop L from a register
+// budget. Only nests with one innermost subloop S and no calls in S. Loads in
+// S whose address is invariant in L are shared by all jammed copies (that is
+// the reuse; none means no jamming). Each copy duplicates the values that
+// depend on L: loads with an L-variant address, reduction phis of S, values
+// computed in L and used in S, plus one temporary. The count is the largest
+// U <= -riscv-xreg-unj-max whose estimate fits in the budget fraction of the
+// N allocatable registers.
+unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const {
+  if (!RISCVXReg::unrollAndJamAuto() || L->isInnermost() ||
+      L->getSubLoops().size() != 1)
+    return 0;
+  Loop *S = L->getSubLoops()[0];
+  if (!S->isInnermost())
+    return 0;
+  auto InvariantIn = [&](const SCEV *P, const Loop *Lp) {
+    if (auto *AR = dyn_cast<SCEVAddRecExpr>(P); AR && AR->getLoop() == S)
+      return SE.isLoopInvariant(AR->getStart(), Lp) &&
+             SE.isLoopInvariant(AR->getStepRecurrence(SE), Lp);
+    return SE.isLoopInvariant(P, Lp);
+  };
+  unsigned Shared = 0, Dup = 1 /* temporary */, Outside = 0;
+  SmallPtrSet<const Value *, 16> Seen;
+  for (BasicBlock *BB : S->blocks())
+    for (Instruction &I : *BB) {
+      if (auto *CB = dyn_cast<CallBase>(&I); CB && !isa<IntrinsicInst>(CB))
+        return 0;
+      if (auto *Ld = dyn_cast<LoadInst>(&I)) {
+        const SCEV *P = SE.getSCEV(Ld->getPointerOperand());
+        if (SE.isLoopInvariant(P, S))
+          continue; // hoisted out of S; a live-in below if used
+        if (InvariantIn(P, L))
+          ++Shared;
+        else
+          ++Dup;
+      }
+      if (auto *Phi = dyn_cast<PHINode>(&I); Phi && BB == S->getHeader() &&
+          !isa<SCEVAddRecExpr>(SE.getSCEV(Phi)))
+        ++Dup; // reduction / recurrence carried by each copy
+      for (const Use &U : I.operands()) {
+        auto *Def = dyn_cast<Instruction>(U.get());
+        if (!Def || S->contains(Def) || !Seen.insert(Def).second)
+          continue;
+        if (L->contains(Def))
+          ++Dup; // computed per outer iteration
+        else
+          ++Outside;
+      }
+    }
+  if (Shared == 0)
+    return 0;
+  unsigned N = RISCVXReg::getNumGPRs();
+  unsigned Budget = N * RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
+  unsigned Base = 8 /* zero, ra, sp, gp, tp, IVs, bound */ + Outside + Shared;
+  if (Budget <= Base)
+    return 0;
+  unsigned U = std::min(RISCVXReg::getUnrollAndJamMax(), (Budget - Base) / Dup);
+  LLVM_DEBUG(dbgs() << "xreg-unj-auto: " << L->getHeader()->getName()
+                    << " shared=" << Shared << " dup=" << Dup << " outside="
+                    << Outside << " N=" << N << " -> U=" << (U < 2 ? 0 : U)
+                    << "\n");
+  return U < 2 ? 0 : U;
+}
+
 void RISCVTTIImpl::getUnrollingPreferences(
     Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP,
     OptimizationRemarkEmitter *ORE) const {
   // TODO: More tuning on benchmarks and metrics with changes as needed
   //       would apply to all settings below to enable performance.
 
+
+  // xreg (H4c): let LoopUnrollAndJam consider outer loops; the count comes
+  // from getUnrollAndJamCount (register budget), so nothing else changes.
+  if (RISCVXReg::unrollAndJamAuto() && !L->isInnermost()) {
+    UP.UnrollAndJam = true;
+    UP.UnrollAndJamInnerLoopThreshold = 4096;
+  }
 
   // xreg (H4a): register tiling. For a loop that contains a loop, allow
   // unroll-and-jam with a count of up to U (-riscv-xreg-unj=U); the size

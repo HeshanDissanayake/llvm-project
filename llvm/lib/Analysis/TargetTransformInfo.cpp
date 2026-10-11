@@ -412,6 +412,11 @@ std::optional<Value *> TargetTransformInfo::simplifyDemandedVectorEltsIntrinsic(
       SimplifyAndSetOp);
 }
 
+unsigned TargetTransformInfo::getUnrollAndJamCount(Loop *L,
+                                                   ScalarEvolution &SE) const {
+  return TTIImpl->getUnrollAndJamCount(L, SE);
+}
+
 void TargetTransformInfo::getUnrollingPreferences(
     Loop *L, ScalarEvolution &SE, UnrollingPreferences &UP,
     OptimizationRemarkEmitter *ORE) const {

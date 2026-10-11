@@ -181,6 +181,17 @@ static bool computeUnrollAndJamCount(
       return true;
   }
 
+  // A count chosen by the target (e.g. from a register budget) is treated
+  // like an explicit count; the target is responsible for profitability.
+  if (!UserUnrollCount && PragmaCount == 0)
+    if (unsigned TC = TTI.getUnrollAndJamCount(L, SE)) {
+      UP.Count = TC;
+      UP.Runtime = true;
+      UP.Force = true;
+      if (UP.AllowRemainder || OuterTripMultiple % TC == 0)
+        return true;
+    }
+
   bool PragmaEnableUnroll = hasUnrollAndJamEnablePragma(L);
   bool ExplicitUnrollAndJamCount = PragmaCount > 0 || UserUnrollCount;
   bool ExplicitUnrollAndJam = PragmaEnableUnroll || ExplicitUnrollAndJamCount;

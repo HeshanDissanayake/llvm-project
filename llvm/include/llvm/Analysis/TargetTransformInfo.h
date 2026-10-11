@@ -740,6 +740,11 @@ public:
                                         UnrollingPreferences &UP,
                                         OptimizationRemarkEmitter *ORE) const;
 
+  /// Target-chosen unroll-and-jam count for outer loop \p L (0 = no
+  /// preference: use the generic heuristic). A nonzero count is treated like
+  /// an explicit count; legality is still checked by the pass.
+  LLVM_ABI unsigned getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const;
+
   /// Query the target whether it would be profitable to convert the given loop
   /// into a hardware loop.
   LLVM_ABI bool isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,

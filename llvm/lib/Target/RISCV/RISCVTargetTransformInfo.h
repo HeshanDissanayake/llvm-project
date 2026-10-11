@@ -161,6 +161,9 @@ public:
                        const TTI::PointersChainInfo &Info, Type *AccessTy,
                        TTI::TargetCostKind CostKind) const override;
 
+  /// xreg (H4c): register-aware unroll-and-jam count (-riscv-xreg-unj-auto).
+  unsigned getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const override;
+
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
                                OptimizationRemarkEmitter *ORE) const override;

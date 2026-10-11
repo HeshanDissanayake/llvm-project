@@ -306,6 +306,10 @@ public:
                                        TTI::UnrollingPreferences &,
                                        OptimizationRemarkEmitter *) const {}
 
+  virtual unsigned getUnrollAndJamCount(Loop *, ScalarEvolution &) const {
+    return 0;
+  }
+
   virtual void getPeelingPreferences(Loop *, ScalarEvolution &,
                                      TTI::PeelingPreferences &) const {}
 

@@ -68,6 +68,21 @@ static cl::opt<bool> XRegScalarRepl(
 
 bool RISCVXReg::scalarRepl() { return XRegScalarRepl; }
 
+static cl::opt<bool> XRegUnJAuto(
+    "riscv-xreg-unj-auto", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H4c): unroll-and-jam outer loops with a count chosen from "
+             "a register budget; needs -enable-unroll-and-jam"));
+static cl::opt<unsigned> XRegUnJMax(
+    "riscv-xreg-unj-max", cl::Hidden, cl::init(16),
+    cl::desc("xreg (H4c): maximum unroll-and-jam count"));
+static cl::opt<unsigned> XRegUnJBudget(
+    "riscv-xreg-unj-budget", cl::Hidden, cl::init(75),
+    cl::desc("xreg (H4c): register budget for unroll-and-jam, percent of N"));
+
+bool RISCVXReg::unrollAndJamAuto() { return XRegUnJAuto; }
+unsigned RISCVXReg::getUnrollAndJamMax() { return XRegUnJMax; }
+unsigned RISCVXReg::getUnrollAndJamBudgetPercent() { return XRegUnJBudget; }
+
 bool RISCVXReg::emitTags() { return EmitXRegTags; }
 bool RISCVXReg::pressureHint() { return XRegPressureHint; }
 
