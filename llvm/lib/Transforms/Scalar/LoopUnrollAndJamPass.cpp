@@ -268,7 +268,8 @@ static LoopUnrollResult
 tryToUnrollAndJamLoop(Loop *L, DominatorTree &DT, LoopInfo *LI,
                       ScalarEvolution &SE, const TargetTransformInfo &TTI,
                       AssumptionCache &AC, DependenceInfo &DI,
-                      OptimizationRemarkEmitter &ORE, int OptLevel) {
+                      OptimizationRemarkEmitter &ORE, int OptLevel,
+                      AAResults *AA = nullptr) {
   TargetTransformInfo::UnrollingPreferences UP = gatherUnrollingPreferences(
       L, SE, TTI, nullptr, nullptr, ORE, OptLevel, std::nullopt, std::nullopt,
       std::nullopt, std::nullopt, std::nullopt, std::nullopt);
@@ -371,7 +372,7 @@ tryToUnrollAndJamLoop(Loop *L, DominatorTree &DT, LoopInfo *LI,
   Loop *EpilogueOuterLoop = nullptr;
   LoopUnrollResult UnrollResult = UnrollAndJamLoop(
       L, UP.Count, OuterTripCount, OuterTripMultiple, UP.UnrollRemainder, LI,
-      &SE, &DT, &AC, &TTI, &ORE, &EpilogueOuterLoop);
+      &SE, &DT, &AC, &TTI, &ORE, &EpilogueOuterLoop, AA);
 
   // Assign new loop attributes.
   if (EpilogueOuterLoop) {
@@ -415,7 +416,8 @@ static bool tryToUnrollAndJamLoop(LoopNest &LN, DominatorTree &DT, LoopInfo &LI,
                                   const TargetTransformInfo &TTI,
                                   AssumptionCache &AC, DependenceInfo &DI,
                                   OptimizationRemarkEmitter &ORE, int OptLevel,
-                                  LPMUpdater &U, bool &AnyLoopRemoved) {
+                                  LPMUpdater &U, bool &AnyLoopRemoved,
+                                  AAResults *AA) {
   bool DidSomething = false;
   ArrayRef<Loop *> Loops = LN.getLoops();
   Loop *OutmostLoop = &LN.getOutermostLoop();
@@ -428,7 +430,7 @@ static bool tryToUnrollAndJamLoop(LoopNest &LN, DominatorTree &DT, LoopInfo &LI,
     Loop *L = Worklist.pop_back_val();
     std::string LoopName = std::string(L->getName());
     LoopUnrollResult Result =
-        tryToUnrollAndJamLoop(L, DT, &LI, SE, TTI, AC, DI, ORE, OptLevel);
+        tryToUnrollAndJamLoop(L, DT, &LI, SE, TTI, AC, DI, ORE, OptLevel, AA);
     if (Result != LoopUnrollResult::Unmodified)
       DidSomething = true;
     if (Result == LoopUnrollResult::FullyUnrolled) {
@@ -452,7 +454,7 @@ PreservedAnalyses LoopUnrollAndJamPass::run(LoopNest &LN,
 
   bool AnyLoopRemoved = false;
   if (!tryToUnrollAndJamLoop(LN, AR.DT, AR.LI, AR.SE, AR.TTI, AR.AC, DI, ORE,
-                             OptLevel, U, AnyLoopRemoved))
+                             OptLevel, U, AnyLoopRemoved, &AR.AA))
     return PreservedAnalyses::all();
 
   auto PA = getLoopPassPreservedAnalyses();

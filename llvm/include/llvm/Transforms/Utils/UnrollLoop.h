@@ -105,7 +105,8 @@ LLVM_ABI LoopUnrollResult UnrollAndJamLoop(
     Loop *L, unsigned Count, unsigned TripCount, unsigned TripMultiple,
     bool UnrollRemainder, LoopInfo *LI, ScalarEvolution *SE, DominatorTree *DT,
     AssumptionCache *AC, const TargetTransformInfo *TTI,
-    OptimizationRemarkEmitter *ORE, Loop **EpilogueLoop = nullptr);
+    OptimizationRemarkEmitter *ORE, Loop **EpilogueLoop = nullptr,
+    AAResults *AA = nullptr);
 
 LLVM_ABI bool isSafeToUnrollAndJam(Loop *L, ScalarEvolution &SE,
                                    DominatorTree &DT, DependenceInfo &DI,

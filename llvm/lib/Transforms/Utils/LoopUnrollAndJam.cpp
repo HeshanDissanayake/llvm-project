@@ -48,7 +48,9 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Utils/UnrollLoop.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <assert.h>
@@ -58,6 +60,11 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "loop-unroll-and-jam"
+
+static cl::opt<bool> UnrollAndJamCleanup(
+    "unroll-and-jam-cleanup", cl::init(false), cl::Hidden,
+    cl::desc("After unroll-and-jam, merge the jammed inner loop's congruent "
+             "induction variables and CSE its loads"));
 
 STATISTIC(NumUnrolledAndJammed, "Number of loops unroll and jammed");
 STATISTIC(NumCompletelyUnrolledAndJammed, "Number of loops unroll and jammed");
@@ -215,7 +222,8 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
                        unsigned TripMultiple, bool UnrollRemainder,
                        LoopInfo *LI, ScalarEvolution *SE, DominatorTree *DT,
                        AssumptionCache *AC, const TargetTransformInfo *TTI,
-                       OptimizationRemarkEmitter *ORE, Loop **EpilogueLoop) {
+                       OptimizationRemarkEmitter *ORE, Loop **EpilogueLoop,
+                       AAResults *AA) {
 
   // When we enter here we should have already checked that it is safe
   BasicBlock *Header = L->getHeader();
@@ -595,8 +603,22 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
   // At this point, the code is well formed.  We now do a quick sweep over the
   // inserted code, doing constant propagation and dead code elimination as we
   // go.
+  // The jammed copies of the inner loop keep separate, congruent induction
+  // variables, so their identical address computations, and the loads shared
+  // between copies, aren't recognized as equal (no GVN runs later). With
+  // -unroll-and-jam-cleanup, merge the IVs and CSE the loads of the jammed
+  // inner loop (xreg research, H4e).
+  if (UnrollAndJamCleanup && SE && Count > 1) {
+    SmallVector<WeakTrackingVH, 16> DeadInsts;
+    SCEVExpander Rewriter(*SE, "unj-cleanup");
+    Rewriter.replaceCongruentIVs(SubLoop, DT, DeadInsts, TTI);
+    while (!DeadInsts.empty())
+      if (auto *Inst = dyn_cast_or_null<Instruction>(DeadInsts.pop_back_val()))
+        RecursivelyDeleteTriviallyDeadInstructions(Inst);
+  }
   simplifyLoopAfterUnroll(SubLoop, true, LI, SE, DT, AC, TTI,
-                          SubLoop->getBlocks());
+                          SubLoop->getBlocks(),
+                          UnrollAndJamCleanup ? AA : nullptr);
   simplifyLoopAfterUnroll(L, !CompletelyUnroll && Count > 1, LI, SE, DT, AC,
                           TTI, Blocks);
 

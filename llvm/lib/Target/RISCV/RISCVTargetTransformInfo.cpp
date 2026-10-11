@@ -3033,6 +3033,13 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
         Chosen = C;
         break;
       }
+    // H4e.1: an exact divisor that is at least 3/4 of that factor wins (no
+    // remainder loop at all).
+    for (unsigned C = Chosen; C >= 2 && C * 4 >= Chosen * 3; --C)
+      if (TC % C == 0) {
+        Chosen = C;
+        break;
+      }
   }
   LLVM_DEBUG(dbgs() << "xreg-unj-auto: " << L->getHeader()->getName()
                     << " shared=" << Shared << " dup=" << Dup << " outside="

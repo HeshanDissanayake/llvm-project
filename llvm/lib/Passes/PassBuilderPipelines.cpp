@@ -222,15 +222,6 @@ static cl::opt<bool>
     EnableLoopInterchange("enable-loopinterchange", cl::init(true), cl::Hidden,
                           cl::desc("Enable the LoopInterchange Pass"));
 
-// After unroll-and-jam, the jammed copies of the inner loop keep separate
-// (congruent) induction variables, so their identical address computations
-// and loads aren't recognized as equal; GVN doesn't run again later. This
-// cleanup merges the induction variables and CSEs the loads (xreg research,
-// H4e). Off by default.
-static cl::opt<bool> UnrollAndJamCleanup(
-    "unroll-and-jam-cleanup", cl::init(false), cl::Hidden,
-    cl::desc("Run IndVarSimplify and EarlyCSE after unroll-and-jam"));
-
 static cl::opt<bool> EnableUnrollAndJam("enable-unroll-and-jam",
                                         cl::init(false), cl::Hidden,
                                         cl::desc("Enable Unroll And Jam Pass"));
@@ -1378,10 +1369,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
     if (EnableUnrollAndJam && PTO.LoopUnrolling) {
       FPM.addPass(createFunctionToLoopPassAdaptor(
           LoopUnrollAndJamPass(static_cast<int>(Level))));
-      if (UnrollAndJamCleanup) {
-        FPM.addPass(createFunctionToLoopPassAdaptor(IndVarSimplifyPass()));
-        FPM.addPass(EarlyCSEPass(/*UseMemorySSA=*/true));
-      }
     }
     FPM.addPass(LoopUnrollPass(LoopUnrollOptions(
         static_cast<int>(Level), /*OnlyWhenForced=*/!PTO.LoopUnrolling,
@@ -1483,10 +1470,6 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
     if (EnableUnrollAndJam && PTO.LoopUnrolling) {
       FPM.addPass(createFunctionToLoopPassAdaptor(
           LoopUnrollAndJamPass(static_cast<int>(Level))));
-      if (UnrollAndJamCleanup) {
-        FPM.addPass(createFunctionToLoopPassAdaptor(IndVarSimplifyPass()));
-        FPM.addPass(EarlyCSEPass(/*UseMemorySSA=*/true));
-      }
     }
     FPM.addPass(LoopUnrollPass(LoopUnrollOptions(
         static_cast<int>(Level), /*OnlyWhenForced=*/!PTO.LoopUnrolling,
