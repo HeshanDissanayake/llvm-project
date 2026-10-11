@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_RISCV_RISCVREGISTERINFO_H
 #define LLVM_LIB_TARGET_RISCV_RISCVREGISTERINFO_H
 
+#include "RISCVXReg.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/TargetParser/RISCVTargetParser.h"
 
@@ -72,10 +73,15 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
     // The cost will be compared against BlockFrequency where entry has the
     // value of 1 << 14. A value of 5 will choose to spill or split cold
     // path instead of using a callee-saved register.
+    // xreg (H2b): -riscv-xreg-csr-cost=C sets it to C spill-cost units per
+    // function entry (C << 14). 0 (default) keeps the stock value.
+    if (unsigned C = RISCVXReg::getCSRFirstUseCost())
+      return C << 14;
     return 5;
   }
 
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
+
 
   const TargetRegisterClass *getConstrainedRegClassForOperand(
       const MachineOperand &MO, const MachineRegisterInfo &MRI) const override;

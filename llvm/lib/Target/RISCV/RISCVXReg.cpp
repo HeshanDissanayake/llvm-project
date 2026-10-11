@@ -46,6 +46,14 @@ unsigned RISCVXReg::getNumCalleeSavedExtra() {
   return XRegCalleeSaved;
 }
 
+static cl::opt<unsigned> XRegCSRCost(
+    "riscv-xreg-csr-cost", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H2b): register-allocator cost of the first use of a "
+             "callee-saved register, in spill-cost units per function entry "
+             "(default 0 = stock)"));
+
+unsigned RISCVXReg::getCSRFirstUseCost() { return XRegCSRCost; }
+
 bool RISCVXReg::emitTags() { return EmitXRegTags; }
 bool RISCVXReg::pressureHint() { return XRegPressureHint; }
 

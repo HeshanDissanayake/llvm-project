@@ -30,6 +30,11 @@ unsigned getNumGPRs();
 /// (-riscv-xreg-callee-saved; default 0 = all extras caller-saved, D7).
 unsigned getNumCalleeSavedExtra();
 
+/// H2b: RAGreedy cost of the first use of a callee-saved register, in spill-
+/// cost units per function entry (-riscv-xreg-csr-cost). 0 = stock (the
+/// RISC-V getCSRCost() of 5/16384 per entry, i.e. practically free).
+unsigned getCSRFirstUseCost();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 
