@@ -61,6 +61,13 @@ static cl::opt<unsigned> XRegUnJ(
 
 unsigned RISCVXReg::getUnrollAndJamCount() { return XRegUnJ; }
 
+static cl::opt<bool> XRegScalarRepl(
+    "riscv-xreg-sr", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H4b): scalar replacement of loads across innermost-loop "
+             "iterations"));
+
+bool RISCVXReg::scalarRepl() { return XRegScalarRepl; }
+
 bool RISCVXReg::emitTags() { return EmitXRegTags; }
 bool RISCVXReg::pressureHint() { return XRegPressureHint; }
 

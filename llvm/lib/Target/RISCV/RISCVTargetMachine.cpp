@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RISCVTargetMachine.h"
+#include "RISCVXReg.h"
 #include "MCTargetDesc/RISCVBaseInfo.h"
 #include "RISCV.h"
 #include "RISCVMachineFunctionInfo.h"
@@ -681,6 +682,13 @@ void RISCVTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
                                                  OptimizationLevel Level) {
     if (Level != OptimizationLevel::O0)
       LPM.addPass(LoopIdiomVectorizePass(LoopIdiomVectorizeStyle::Predicated));
+  });
+
+  // xreg (H4b): scalar replacement across iterations, before unrolling.
+  PB.registerVectorizerStartEPCallback([=](FunctionPassManager &FPM,
+                                           OptimizationLevel Level) {
+    if (Level != OptimizationLevel::O0 && RISCVXReg::scalarRepl())
+      FPM.addPass(RISCVXRegScalarReplPass());
   });
 }
 

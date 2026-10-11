@@ -14,6 +14,7 @@
 #ifndef LLVM_LIB_TARGET_RISCV_RISCVXREG_H
 #define LLVM_LIB_TARGET_RISCV_RISCVXREG_H
 
+#include "llvm/IR/PassManager.h"
 #include "llvm/MC/MCRegister.h"
 
 namespace llvm {
@@ -39,6 +40,10 @@ unsigned getCSRFirstUseCost();
 /// 0 = stock).
 unsigned getUnrollAndJamCount();
 
+/// H4b: scalar replacement of loads across innermost-loop iterations
+/// (-riscv-xreg-sr; added at the vectorizer-start extension point).
+bool scalarRepl();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 
@@ -54,6 +59,13 @@ bool emitTags();
 bool pressureHint();
 
 } // namespace RISCVXReg
+
+/// xreg (H4b): scalar replacement across iterations (RISCVXRegScalarRepl.cpp).
+class RISCVXRegScalarReplPass
+    : public PassInfoMixin<RISCVXRegScalarReplPass> {
+public:
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+};
 } // namespace llvm
 
 #endif

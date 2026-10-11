@@ -17,4 +17,5 @@
 #define FUNCTION_PASS(NAME, CREATE_PASS)
 #endif
 FUNCTION_PASS("riscv-codegenprepare", RISCVCodeGenPreparePass(this))
+FUNCTION_PASS("riscv-xreg-scalar-repl", RISCVXRegScalarReplPass())
 #undef FUNCTION_PASS
