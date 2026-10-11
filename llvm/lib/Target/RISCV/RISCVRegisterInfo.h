@@ -82,6 +82,9 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
 
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
 
+  /// xreg (H6): the register globals x(256-K)..x255 change across calls.
+  bool isNeverConstantPhysReg(MCRegister PhysReg) const override;
+
 
   const TargetRegisterClass *getConstrainedRegClassForOperand(
       const MachineOperand &MO, const MachineRegisterInfo &MRI) const override;

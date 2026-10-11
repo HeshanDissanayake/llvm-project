@@ -905,6 +905,17 @@ bool RISCVRegisterInfo::isArgumentRegister(const MachineFunction &MF,
   return false;
 }
 
+bool RISCVRegisterInfo::isNeverConstantPhysReg(MCRegister PhysReg) const {
+  unsigned K = RISCVXReg::getGlobalRegNames().size();
+  if (!K)
+    return false;
+  for (unsigned I = 256 - K; I < 256; ++I)
+    if (PhysReg == RISCV::X0 + I || PhysReg == RISCV::X0_W + I ||
+        PhysReg == RISCV::X0_H + I)
+      return true;
+  return false;
+}
+
 StringRef RISCVRegisterInfo::getRegAsmName(MCRegister Reg) const {
   if (Reg == RISCV::SF_VCIX_STATE)
     return "sf.vcix_state";

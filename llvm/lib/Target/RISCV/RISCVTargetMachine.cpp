@@ -684,6 +684,15 @@ void RISCVTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
       LPM.addPass(LoopIdiomVectorizePass(LoopIdiomVectorizeStyle::Predicated));
   });
 
+  // xreg (H6): whole-program register globals, after all IR optimization
+  // (also at -O0, so every module of the program agrees).
+  PB.registerOptimizerLastEPCallback([=](ModulePassManager &MPM,
+                                         OptimizationLevel Level,
+                                         ThinOrFullLTOPhase) {
+    if (!RISCVXReg::getGlobalRegNames().empty())
+      MPM.addPass(RISCVXRegGlobalRegsPass());
+  });
+
   // xreg (H4b): scalar replacement across iterations, before unrolling.
   PB.registerVectorizerStartEPCallback([=](FunctionPassManager &FPM,
                                            OptimizationLevel Level) {

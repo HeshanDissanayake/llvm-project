@@ -538,6 +538,8 @@ bool MachineRegisterInfo::isConstantPhysReg(MCRegister PhysReg) const {
   const TargetRegisterInfo *TRI = getTargetRegisterInfo();
   if (TRI->isConstantPhysReg(PhysReg))
     return true;
+  if (TRI->isNeverConstantPhysReg(PhysReg))
+    return false;
 
   // Check if any overlapping register is modified, or allocatable so it may be
   // used later.

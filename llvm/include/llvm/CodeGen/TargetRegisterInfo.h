@@ -430,6 +430,13 @@ public:
   /// function.  Used by MachineRegisterInfo::isConstantPhysReg().
   virtual bool isConstantPhysReg(MCRegister PhysReg) const { return false; }
 
+  /// Returns true if PhysReg is unallocatable but may be changed by other
+  /// functions (e.g. a register holding a program-wide global), so it must
+  /// never be treated as constant, even in a function that doesn't write it.
+  virtual bool isNeverConstantPhysReg(MCRegister PhysReg) const {
+    return false;
+  }
+
   /// Returns true if the register class is considered divergent.
   virtual bool isDivergentRegClass(const TargetRegisterClass *RC) const {
     return false;

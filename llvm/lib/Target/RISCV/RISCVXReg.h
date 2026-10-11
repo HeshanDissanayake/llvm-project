@@ -14,7 +14,9 @@
 #ifndef LLVM_LIB_TARGET_RISCV_RISCVXREG_H
 #define LLVM_LIB_TARGET_RISCV_RISCVXREG_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/IR/PassManager.h"
+#include <string>
 #include "llvm/MC/MCRegister.h"
 
 namespace llvm {
@@ -44,6 +46,9 @@ unsigned getUnrollAndJamCount();
 /// (-riscv-xreg-sr; added at the vectorizer-start extension point).
 bool scalarRepl();
 
+/// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
+ArrayRef<std::string> getGlobalRegNames();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 
@@ -59,6 +64,12 @@ bool emitTags();
 bool pressureHint();
 
 } // namespace RISCVXReg
+
+/// xreg (H6): whole-program register globals (RISCVXRegGlobalRegs.cpp).
+class RISCVXRegGlobalRegsPass : public PassInfoMixin<RISCVXRegGlobalRegsPass> {
+public:
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
 
 /// xreg (H4b): scalar replacement across iterations (RISCVXRegScalarRepl.cpp).
 class RISCVXRegScalarReplPass
