@@ -58,6 +58,8 @@ bool unrollAndJamAuto();
 bool unrollAndJamTripAware();
 /// H4d: count shifted (stencil-row) reuse as sharing (-riscv-xreg-unj-shifted).
 bool unrollAndJamShifted();
+/// H4e: diminishing-returns target in percent (-riscv-xreg-unj-dimret, 0 = off).
+unsigned getUnrollAndJamDimRet();
 unsigned getUnrollAndJamMax();
 unsigned getUnrollAndJamBudgetPercent();
 

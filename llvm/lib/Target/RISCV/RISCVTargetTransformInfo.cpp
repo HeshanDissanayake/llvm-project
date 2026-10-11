@@ -3011,6 +3011,17 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
   if (Budget <= Base)
     return 0;
   unsigned U = std::min(RISCVXReg::getUnrollAndJamMax(), (Budget - Base) / Dup);
+  // H4e: shared-load savings grow as 1 - 1/U. With -riscv-xreg-unj-dimret=P,
+  // take the smallest factor reaching P% of the savings of the budget factor
+  // (saves registers where larger factors add little).
+  if (unsigned P = RISCVXReg::getUnrollAndJamDimRet(); P && U >= 2) {
+    double Target = P / 100.0 * (1.0 - 1.0 / U);
+    for (unsigned C = 2; C <= U; ++C)
+      if (1.0 - 1.0 / C >= Target - 1e-9) {
+        U = C;
+        break;
+      }
+  }
   // H4c.1: with a known outer trip count, take the largest factor that
   // leaves at most 1/8 of the iterations to the un-jammed remainder.
   unsigned TC = SE.getSmallConstantTripCount(L);

@@ -93,6 +93,13 @@ static cl::opt<bool> XRegUnJShifted(
              "inner loads differ by multiples of the outer stride (stencils)"));
 
 bool RISCVXReg::unrollAndJamShifted() { return XRegUnJShifted; }
+
+static cl::opt<unsigned> XRegUnJDimRet(
+    "riscv-xreg-unj-dimret", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H4e): smallest unroll-and-jam factor reaching this percent "
+             "of the shared-load savings of the budget factor (0 = off)"));
+
+unsigned RISCVXReg::getUnrollAndJamDimRet() { return XRegUnJDimRet; }
 unsigned RISCVXReg::getUnrollAndJamMax() { return XRegUnJMax; }
 unsigned RISCVXReg::getUnrollAndJamBudgetPercent() { return XRegUnJBudget; }
 
