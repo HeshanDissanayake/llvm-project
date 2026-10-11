@@ -2953,6 +2953,11 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
   };
   unsigned Shared = 0, Dup = 1 /* temporary */, Outside = 0;
   SmallPtrSet<const Value *, 16> Seen;
+  // H4d: L-variant loads of S whose start addresses differ by a constant
+  // multiple of L's stride (stencil rows A[i-1][j], A[i][j], A[i+1][j]) are
+  // shared between jammed copies after jamming (copy i's row i+1 is copy
+  // i+1's row i).
+  SmallVector<const SCEVAddRecExpr *, 8> RowStarts;
   for (BasicBlock *BB : S->blocks())
     for (Instruction &I : *BB) {
       if (auto *CB = dyn_cast<CallBase>(&I); CB && !isa<IntrinsicInst>(CB))
@@ -2961,10 +2966,16 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
         const SCEV *P = SE.getSCEV(Ld->getPointerOperand());
         if (SE.isLoopInvariant(P, S))
           continue; // hoisted out of S; a live-in below if used
-        if (InvariantIn(P, L))
+        if (InvariantIn(P, L)) {
           ++Shared;
-        else
+        } else {
           ++Dup;
+          if (RISCVXReg::unrollAndJamShifted())
+            if (auto *AR = dyn_cast<SCEVAddRecExpr>(P); AR && AR->getLoop() == S)
+              if (auto *St = dyn_cast<SCEVAddRecExpr>(AR->getStart());
+                  St && St->getLoop() == L && St->isAffine())
+                RowStarts.push_back(St);
+        }
       }
       if (auto *Phi = dyn_cast<PHINode>(&I); Phi && BB == S->getHeader() &&
           !isa<SCEVAddRecExpr>(SE.getSCEV(Phi)))
@@ -2977,6 +2988,19 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
           ++Dup; // computed per outer iteration
         else
           ++Outside;
+      }
+    }
+  for (unsigned A = 0; A < RowStarts.size(); ++A)
+    for (unsigned B = A + 1; B < RowStarts.size(); ++B) {
+      const SCEV *StepA = RowStarts[A]->getStepRecurrence(SE);
+      if (StepA != RowStarts[B]->getStepRecurrence(SE))
+        continue;
+      auto *D = dyn_cast<SCEVConstant>(SE.getMinusSCEV(RowStarts[A], RowStarts[B]));
+      auto *St = dyn_cast<SCEVConstant>(StepA);
+      if (D && St && !St->getAPInt().isZero() && !D->getAPInt().isZero() &&
+          D->getAPInt().srem(St->getAPInt()).isZero()) {
+        ++Shared; // shifted reuse between jammed copies
+        break;
       }
     }
   if (Shared == 0)

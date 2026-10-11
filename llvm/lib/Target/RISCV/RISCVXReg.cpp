@@ -86,6 +86,13 @@ static cl::opt<bool> XRegUnJTripAware(
 
 bool RISCVXReg::unrollAndJamAuto() { return XRegUnJAuto; }
 bool RISCVXReg::unrollAndJamTripAware() { return XRegUnJTripAware; }
+
+static cl::opt<bool> XRegUnJShifted(
+    "riscv-xreg-unj-shifted", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H4d): with -riscv-xreg-unj-auto, also jam nests whose "
+             "inner loads differ by multiples of the outer stride (stencils)"));
+
+bool RISCVXReg::unrollAndJamShifted() { return XRegUnJShifted; }
 unsigned RISCVXReg::getUnrollAndJamMax() { return XRegUnJMax; }
 unsigned RISCVXReg::getUnrollAndJamBudgetPercent() { return XRegUnJBudget; }
 

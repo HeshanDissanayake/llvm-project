@@ -56,6 +56,8 @@ bool unrollAndJamAuto();
 /// H4c.1: prefer factors leaving <= 1/8 of a known trip count as remainder
 /// (-riscv-xreg-unj-tripaware, default on).
 bool unrollAndJamTripAware();
+/// H4d: count shifted (stencil-row) reuse as sharing (-riscv-xreg-unj-shifted).
+bool unrollAndJamShifted();
 unsigned getUnrollAndJamMax();
 unsigned getUnrollAndJamBudgetPercent();
 
