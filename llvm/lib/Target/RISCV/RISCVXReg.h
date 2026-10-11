@@ -35,6 +35,10 @@ unsigned getNumCalleeSavedExtra();
 /// RISC-V getCSRCost() of 5/16384 per entry, i.e. practically free).
 unsigned getCSRFirstUseCost();
 
+/// H4a: maximum unroll-and-jam count for outer loops (-riscv-xreg-unj;
+/// 0 = stock).
+unsigned getUnrollAndJamCount();
+
 /// True if \p Reg is one of x32..x255 (or one of their sub-registers).
 bool isExtendedGPR(MCRegister Reg, const MCRegisterInfo &MRI);
 

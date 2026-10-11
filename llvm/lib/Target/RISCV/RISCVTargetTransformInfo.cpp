@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RISCVTargetTransformInfo.h"
+#include "RISCVXReg.h"
 #include "MCTargetDesc/RISCVMatInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -2933,6 +2934,22 @@ void RISCVTTIImpl::getUnrollingPreferences(
   // TODO: More tuning on benchmarks and metrics with changes as needed
   //       would apply to all settings below to enable performance.
 
+
+  // xreg (H4a): register tiling. For a loop that contains a loop, allow
+  // unroll-and-jam with a count of up to U (-riscv-xreg-unj=U); the size
+  // thresholds are raised so that U is the binding limit. Legality
+  // (dependence analysis) and the reuse heuristic stay in
+  // LoopUnrollAndJamPass. Needs -enable-unroll-and-jam in the pipeline.
+  if (unsigned U = RISCVXReg::getUnrollAndJamCount(); U && !L->isInnermost()) {
+    UP.UnrollAndJam = true;
+    UP.Partial = true;
+    UP.Runtime = true;
+    UP.AllowRemainder = true;
+    UP.MaxCount = U;
+    UP.PartialThreshold = 4096; // full-unroll Threshold left at default
+    UP.UnrollAndJamInnerLoopThreshold = 4096;
+    return;
+  }
 
   if (ST->enableDefaultUnroll())
     return BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);

@@ -54,6 +54,13 @@ static cl::opt<unsigned> XRegCSRCost(
 
 unsigned RISCVXReg::getCSRFirstUseCost() { return XRegCSRCost; }
 
+static cl::opt<unsigned> XRegUnJ(
+    "riscv-xreg-unj", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H4a): allow unroll-and-jam of outer loops with a count "
+             "of up to U (default 0 = stock); needs -enable-unroll-and-jam"));
+
+unsigned RISCVXReg::getUnrollAndJamCount() { return XRegUnJ; }
+
 bool RISCVXReg::emitTags() { return EmitXRegTags; }
 bool RISCVXReg::pressureHint() { return XRegPressureHint; }
 
