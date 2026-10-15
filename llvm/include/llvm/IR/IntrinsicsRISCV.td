@@ -29,11 +29,11 @@
 let TargetPrefix = "riscv" in {
   def int_riscv_xreg_rget
       : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
-                              [IntrInaccessibleMemOnly, IntrReadMem,
+                              [IntrNoMem, IntrHasSideEffects,
                                ImmArg<ArgIndex<1>>]>;
   def int_riscv_xreg_rset
       : DefaultAttrsIntrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
-                              [IntrInaccessibleMemOnly, IntrWriteMem,
+                              [IntrNoMem, IntrHasSideEffects,
                                ImmArg<ArgIndex<2>>]>;
 } // TargetPrefix = "riscv"
 
