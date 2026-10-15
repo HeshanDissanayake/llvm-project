@@ -3136,9 +3136,18 @@ void RISCVTTIImpl::getUnrollingPreferences(
             if (auto *D = dyn_cast<Instruction>(Op); D && !P->contains(D))
               LiveIn.insert(D);
       Live += LiveIn.size();
+      // And P-invariant loads still inside P's own body (not yet hoisted).
+      SmallPtrSet<const Value *, 32> Own;
+      for (BasicBlock *BB : P->blocks())
+        if (none_of(P->getSubLoops(), [&](Loop *S) { return S->contains(BB); }))
+          for (Instruction &I : *BB)
+            if (auto *Ld = dyn_cast<LoadInst>(&I))
+              if (SE.isLoopInvariant(SE.getSCEV(Ld->getPointerOperand()), P))
+                Own.insert(Ld);
+      Live += Own.size();
       LLVM_DEBUG(dbgs() << "xreg H7c: " << L->getHeader()->getName()
                         << " live " << Live << " (live-ins " << LiveIn.size()
-                        << ")\n");
+                        << ", own " << Own.size() << ")\n");
       uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
                         RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
       return Live <= Budget;
