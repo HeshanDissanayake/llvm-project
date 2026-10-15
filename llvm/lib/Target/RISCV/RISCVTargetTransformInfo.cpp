@@ -3129,7 +3129,7 @@ void RISCVTTIImpl::getUnrollingPreferences(
       // Plus P's live-ins: values computed outside P and used inside it stay
       // in registers across P (e.g. the loads of a sibling loop that was
       // fully unrolled earlier and then hoisted out of P: EXP-027 pb-atax).
-      SmallPtrSet<const Value *, 64> LiveIn;
+      SmallPtrSet<const Value *, 32> LiveIn;
       for (BasicBlock *BB : P->blocks())
         for (Instruction &I : *BB)
           for (const Value *Op : I.operands())
