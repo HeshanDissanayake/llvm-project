@@ -3048,6 +3048,40 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
   return Chosen < 2 ? 0 : Chosen;
 }
 
+// xreg (H7b): inlining bonus for calls that pass pointers to the caller's
+// small local aggregates. After inlining (and full unrolling of the callee's
+// loops) every access to the aggregate has a constant index and SROA keeps it
+// in registers. The bonus applies only while all static allocas of the caller
+// fit in the register budget (one register per 32-bit element, a share of
+// -riscv-num-gprs), so at 32 registers nothing changes.
+unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
+  unsigned Bonus = RISCVXReg::getInlineAggBonus();
+  if (!Bonus)
+    return 0;
+  bool PassesAlloca = false;
+  for (const Value *A : CB->args())
+    if (auto *AI = dyn_cast<AllocaInst>(getUnderlyingObject(A));
+        AI && AI->isStaticAlloca()) {
+      PassesAlloca = true;
+      break;
+    }
+  if (!PassesAlloca)
+    return 0;
+  const DataLayout &DL = getDataLayout();
+  uint64_t Bytes = 0;
+  for (const Instruction &I : CB->getCaller()->getEntryBlock())
+    if (auto *AI = dyn_cast<AllocaInst>(&I); AI && AI->isStaticAlloca()) {
+      std::optional<TypeSize> S = AI->getAllocationSize(DL);
+      if (!S || S->isScalable())
+        return 0;
+      Bytes += S->getFixedValue();
+    }
+  uint64_t Regs = divideCeil(Bytes, 4);
+  uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
+                    RISCVXReg::getInlineAggBudgetPercent() / 100;
+  return Regs <= Budget ? Bonus : 0;
+}
+
 void RISCVTTIImpl::getUnrollingPreferences(
     Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP,
     OptimizationRemarkEmitter *ORE) const {

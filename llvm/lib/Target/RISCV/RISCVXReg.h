@@ -53,6 +53,11 @@ bool noCSRClone();
 /// H7: full-unroll size threshold for loops that unroll-and-jam won't tile
 /// (-riscv-xreg-full-unroll; 0 = stock).
 unsigned getFullUnrollThreshold();
+/// H7b: inlining bonus for calls passing pointers to the caller's local
+/// aggregates while they fit the register budget (-riscv-xreg-inline-agg,
+/// -riscv-xreg-inline-agg-budget in percent of N).
+unsigned getInlineAggBonus();
+unsigned getInlineAggBudgetPercent();
 
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
