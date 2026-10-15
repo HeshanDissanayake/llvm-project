@@ -50,6 +50,10 @@ bool scalarRepl();
 /// IPRA's no-CSR convention applies (-riscv-xreg-nocsr-clone).
 bool noCSRClone();
 
+/// H7: full-unroll size threshold for loops that unroll-and-jam won't tile
+/// (-riscv-xreg-full-unroll; 0 = stock).
+unsigned getFullUnrollThreshold();
+
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
 
