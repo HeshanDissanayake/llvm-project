@@ -3103,6 +3103,12 @@ unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
         return 0;
       Bytes += S->getFixedValue();
     }
+  // H14: the caller after inlining must fit the I-cache budget.
+  if (unsigned B = RISCVXReg::getICacheBudget())
+    if (const Function *Callee = CB->getCalledFunction())
+      if (RISCVXReg::codeBytes(CB->getCaller()->getInstructionCount() +
+                               Callee->getInstructionCount()) > B)
+        return 0;
   uint64_t Regs = divideCeil(Bytes, 4);
   uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
                     RISCVXReg::getInlineAggBudgetPercent() / 100;
@@ -3181,7 +3187,30 @@ void RISCVTTIImpl::getUnrollingPreferences(
     };
     LLVM_DEBUG(dbgs() << "xreg H7: " << L->getHeader()->getName()
                       << " tiled " << Tiled << "\n");
-    if (!Tiled || ReuseFits())
+    // H14: the loop nest after unrolling must fit the I-cache budget, or the
+    // unrolled hot code is fetched again on every pass (EXP-029: heat-3d's
+    // unrolled stencil is 86 KiB at 256 registers).
+    auto FitsICache = [&]() {
+      unsigned B = RISCVXReg::getICacheBudget();
+      if (!B)
+        return true;
+      unsigned TC = SE.getSmallConstantTripCount(L);
+      if (!TC)
+        TC = SE.getSmallConstantMaxTripCount(L);
+      if (!TC)
+        return true; // can't be fully unrolled anyway
+      Loop *Top = L;
+      while (Top->getParentLoop())
+        Top = Top->getParentLoop();
+      auto Insts = [](Loop *X) {
+        uint64_t N = 0;
+        for (BasicBlock *BB : X->blocks())
+          N += BB->sizeWithoutDebug();
+        return N;
+      };
+      return RISCVXReg::codeBytes(Insts(Top) + Insts(L) * (TC - 1)) <= B;
+    };
+    if ((!Tiled || ReuseFits()) && FitsICache())
       UP.Threshold = std::max(UP.Threshold, T);
   }
 

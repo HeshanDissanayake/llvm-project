@@ -82,6 +82,21 @@ static cl::opt<unsigned> XRegFullUnroll(
 
 unsigned RISCVXReg::getFullUnrollThreshold() { return XRegFullUnroll; }
 
+static cl::opt<unsigned> XRegICacheBudget(
+    "riscv-xreg-icache-budget", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H14): code-size budget in bytes for the loop nest of a "
+             "loop fully unrolled by H7a/H7c, and for a caller given the H7b "
+             "inlining bonus (0 = off)"));
+static cl::opt<unsigned> XRegICachePfx(
+    "riscv-xreg-icache-pfx", cl::Hidden, cl::init(140),
+    cl::desc("xreg (H14): code-size allowance for xpfx prefixes when N > 32, "
+             "in percent"));
+
+unsigned RISCVXReg::getICacheBudget() { return XRegICacheBudget; }
+uint64_t RISCVXReg::codeBytes(uint64_t IRInsts) {
+  return IRInsts * 4 * (getNumGPRs() > 32 ? XRegICachePfx : 100) / 100;
+}
+
 static cl::opt<bool> XRegFullUnrollReuse(
     "riscv-xreg-full-unroll-reuse", cl::Hidden, cl::init(false),
     cl::desc("xreg (H7c): with -riscv-xreg-full-unroll, also fully unroll the "

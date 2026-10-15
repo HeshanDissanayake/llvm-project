@@ -53,6 +53,12 @@ bool noCSRClone();
 /// H7: full-unroll size threshold for loops that unroll-and-jam won't tile
 /// (-riscv-xreg-full-unroll; 0 = stock).
 unsigned getFullUnrollThreshold();
+/// H14: I-cache footprint budget in bytes for H7a/H7c full unrolling and the
+/// H7b inlining bonus (-riscv-xreg-icache-budget, 0 = off), and the estimated
+/// code bytes of IRInsts IR instructions (4 bytes each, plus the prefix
+/// allowance -riscv-xreg-icache-pfx when N > 32).
+unsigned getICacheBudget();
+uint64_t codeBytes(uint64_t IRInsts);
 /// H7c: also fully unroll the innermost loop of a tiled nest when its reused
 /// values fit the register budget (-riscv-xreg-full-unroll-reuse).
 bool fullUnrollReuse();
