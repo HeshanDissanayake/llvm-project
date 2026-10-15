@@ -365,7 +365,39 @@ static bool runOnFunction(Function &F, unsigned PoolBegin, unsigned PoolEnd,
   return Changed;
 }
 
+// Registers the call-free function F would need for its local arrays.
+static uint64_t localArrayNeed(Function &F) {
+  if (F.isDeclaration())
+    return 0;
+  const DataLayout &DL = F.getDataLayout();
+  uint64_t Need = 0;
+  SmallPtrSet<Instruction *, 8> Own;
+  for (Instruction &I : F.getEntryBlock()) {
+    auto *AI = dyn_cast<AllocaInst>(&I);
+    uint64_t N = 0;
+    Type *T = AI && AI->isStaticAlloca() ? arrayElem(AI->getAllocatedType(), N) : nullptr;
+    if (!T || N < 2)
+      continue;
+    Derived D(AI, T, N, DL);
+    if (D.analyze(/*AllowInit=*/true)) {
+      Need += N;
+      for (auto *M : D.Inits)
+        Own.insert(M);
+    }
+  }
+  for (Instruction &I : instructions(F))
+    if (auto *CB = dyn_cast<CallBase>(&I)) {
+      auto *II = dyn_cast<IntrinsicInst>(CB);
+      if (!II || (isa<MemIntrinsic>(II) && !Own.count(II)))
+        return 0;
+    }
+  return Need;
+}
+
 static void reportGlobalArrays(Module &M, ModuleAnalysisManager &AM) {
+  for (Function &F : M)
+    if (uint64_t Need = localArrayNeed(F))
+      errs() << "xreg-larray: " << F.getName() << " " << Need << "\n";
   auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   const DataLayout &DL = M.getDataLayout();
   bool HasMain = M.getFunction("main") && !M.getFunction("main")->isDeclaration();
