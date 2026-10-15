@@ -2979,7 +2979,8 @@ unsigned RISCVTTIImpl::getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const 
         }
       }
       if (auto *Phi = dyn_cast<PHINode>(&I); Phi && BB == S->getHeader() &&
-          !isa<SCEVAddRecExpr>(SE.getSCEV(Phi)))
+          (!SE.isSCEVable(Phi->getType()) || // e.g. an FP recurrence
+           !isa<SCEVAddRecExpr>(SE.getSCEV(Phi))))
         ++Dup; // reduction / recurrence carried by each copy
       for (const Use &U : I.operands()) {
         auto *Def = dyn_cast<Instruction>(U.get());
