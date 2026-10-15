@@ -68,6 +68,14 @@ static cl::opt<bool> XRegScalarRepl(
 
 bool RISCVXReg::scalarRepl() { return XRegScalarRepl; }
 
+static cl::opt<bool> XRegRegArray(
+    "riscv-xreg-regarray", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H13): keep variable-indexed local arrays of call-free "
+             "functions in a register block x(N)..x(255-#globals), accessed "
+             "with xrget/xrset"));
+
+bool RISCVXReg::regArray() { return XRegRegArray; }
+
 static cl::opt<bool> XRegNoCSRClone(
     "riscv-xreg-nocsr-clone", cl::Hidden, cl::init(false),
     cl::desc("xreg (H9): give external functions an internal clone for "

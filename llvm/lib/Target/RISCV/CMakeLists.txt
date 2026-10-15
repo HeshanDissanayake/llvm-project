@@ -71,6 +71,7 @@ add_llvm_target(RISCVCodeGen
   RISCVXReg.cpp
   RISCVXRegGlobalRegs.cpp
   RISCVXRegNoCSRClone.cpp
+  RISCVXRegRegArray.cpp
   RISCVXRegScalarRepl.cpp
   RISCVTargetTransformInfo.cpp
   RISCVVectorMaskDAGMutation.cpp

@@ -18,6 +18,7 @@
 #endif
 MODULE_PASS("riscv-xreg-gregs", RISCVXRegGlobalRegsPass())
 MODULE_PASS("riscv-xreg-nocsr-clone", RISCVXRegNoCSRClonePass())
+MODULE_PASS("riscv-xreg-regarray", RISCVXRegRegArrayPass())
 #undef MODULE_PASS
 
 #ifndef FUNCTION_PASS

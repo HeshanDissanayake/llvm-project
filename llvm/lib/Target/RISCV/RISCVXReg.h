@@ -74,6 +74,9 @@ bool fullUnrollReuse();
 unsigned getInlineAggBonus();
 unsigned getInlineAggBudgetPercent();
 
+/// H13: register-indexed local arrays (-riscv-xreg-regarray).
+bool regArray();
+
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
 
@@ -109,6 +112,12 @@ bool pressureHint();
 
 /// xreg (H6): whole-program register globals (RISCVXRegGlobalRegs.cpp).
 class RISCVXRegGlobalRegsPass : public PassInfoMixin<RISCVXRegGlobalRegsPass> {
+public:
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
+/// xreg (H13): register-indexed local arrays (RISCVXRegRegArray.cpp).
+class RISCVXRegRegArrayPass : public PassInfoMixin<RISCVXRegRegArrayPass> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };

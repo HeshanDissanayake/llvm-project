@@ -32,3 +32,27 @@ def XPFX : RVInst<(outs), (ins uimm3:$rdh, uimm3:$rs1h, uimm3:$rs2h, uimm3:$rs3h
   let Inst{9-7} = rdh;
   let Inst{6-0} = OPC_CUSTOM_0.Value;
 }
+
+// xrget / xrset (H13, research): register-indexed access.
+//   xrget rd, rs1, imm   rd = x[(imm + x[rs1]) mod 256]   I-type, custom-2, 000
+//   xrset rs2, rs1, imm  x[(imm + x[rs1]) mod 256] = rs2  S-type, custom-2, 001
+// The block (imm..) lies above the allocatable registers (reserved), so the
+// register allocator never sees it; the instructions keep their order through
+// hasSideEffects.
+let Predicates = [HasVendorXReg], hasSideEffects = 1, mayLoad = 0,
+    mayStore = 0, DecoderNamespace = "XReg" in {
+def XRGET : RVInstI<0b000, OPC_CUSTOM_2, (outs GPR:$rd),
+                    (ins GPR:$rs1, uimm8:$imm12), "xrget", "$rd, $rs1, $imm12">,
+            Sched<[]>;
+def XRSET : RVInstS<0b001, OPC_CUSTOM_2, (outs),
+                    (ins GPR:$rs2, GPR:$rs1, uimm8:$imm12), "xrset",
+                    "$rs2, $rs1, $imm12">,
+            Sched<[]>;
+}
+
+let Predicates = [HasVendorXReg, IsRV64] in {
+def : Pat<(i64 (int_riscv_xreg_rget GPR:$idx, timm:$base)),
+          (XRGET GPR:$idx, timm:$base)>;
+def : Pat<(int_riscv_xreg_rset GPR:$val, GPR:$idx, timm:$base),
+          (XRSET GPR:$val, GPR:$idx, timm:$base)>;
+}

@@ -22,6 +22,21 @@
 // suffixed with the pointer type they are specialised for (denoted `<p>` in the
 // names below), in order to avoid type conflicts.
 
+// xreg H13 (research, LLVM-regsw docs/infra/xreg-encoding.md): register-
+// indexed access to a block of registers above the allocatable range.
+//   i64 @llvm.riscv.xreg.rget(i64 idx, i64 imm base)  = x[base + idx]
+//   void @llvm.riscv.xreg.rset(i64 val, i64 idx, i64 imm base)
+let TargetPrefix = "riscv" in {
+  def int_riscv_xreg_rget
+      : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty],
+                              [IntrInaccessibleMemOnly, IntrReadMem,
+                               ImmArg<ArgIndex<1>>]>;
+  def int_riscv_xreg_rset
+      : DefaultAttrsIntrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+                              [IntrInaccessibleMemOnly, IntrWriteMem,
+                               ImmArg<ArgIndex<2>>]>;
+} // TargetPrefix = "riscv"
+
 let TargetPrefix = "riscv" in {
 
   // T @llvm.<name>.<i>.<p>(any*, T, T, T imm);
