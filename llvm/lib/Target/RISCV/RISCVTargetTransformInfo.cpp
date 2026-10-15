@@ -3101,26 +3101,34 @@ void RISCVTTIImpl::getUnrollingPreferences(
     // when the values it reuses across the parent loop fit the register
     // budget: TC x (loads whose addresses repeat in every iteration of the
     // parent) values, kept in registers instead of reloaded (EXP-025).
-    auto ReuseFits = [&]() {
-      if (!RISCVXReg::fullUnrollReuse() || !P || !L->isInnermost())
-        return false;
-      unsigned TC = SE.getSmallConstantTripCount(L);
+    // The sum is over all innermost loops of the parent (EXP-027 pb-atax: two
+    // sibling loops each fit, together they don't).
+    auto ReusedValues = [&](Loop *S) -> uint64_t {
+      unsigned TC = S->isInnermost() ? SE.getSmallConstantTripCount(S) : 0;
       if (!TC)
-        return false;
+        return 0;
       SmallPtrSet<const SCEV *, 16> Reused;
-      for (BasicBlock *BB : L->blocks())
+      for (BasicBlock *BB : S->blocks())
         for (Instruction &I : *BB)
           if (auto *Ld = dyn_cast<LoadInst>(&I))
             if (auto *AR = dyn_cast<SCEVAddRecExpr>(
                     SE.getSCEV(Ld->getPointerOperand()));
-                AR && AR->getLoop() == L &&
+                AR && AR->getLoop() == S &&
                 SE.isLoopInvariant(AR->getStart(), P) &&
                 SE.isLoopInvariant(AR->getStepRecurrence(SE), P))
               Reused.insert(AR);
-      uint64_t Live = uint64_t(TC) * Reused.size();
+      return uint64_t(TC) * Reused.size();
+    };
+    auto ReuseFits = [&]() {
+      if (!RISCVXReg::fullUnrollReuse() || !P || !L->isInnermost() ||
+          !ReusedValues(L))
+        return false;
+      uint64_t Live = 0;
+      for (Loop *S : P->getSubLoops())
+        Live += ReusedValues(S);
       uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
                         RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
-      return !Reused.empty() && Live <= Budget;
+      return Live <= Budget;
     };
     if (!Tiled || ReuseFits())
       UP.Threshold = std::max(UP.Threshold, T);
