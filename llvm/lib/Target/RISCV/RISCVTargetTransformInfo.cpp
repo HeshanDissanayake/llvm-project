@@ -3096,7 +3096,33 @@ void RISCVTTIImpl::getUnrollingPreferences(
   // limit: fully unrolling them first destroys the tiling (EXP-023 syrk).
   if (unsigned T = RISCVXReg::getFullUnrollThreshold()) {
     Loop *P = L->getParentLoop();
-    if (!getUnrollAndJamCount(L, SE) && !(P && getUnrollAndJamCount(P, SE)))
+    bool Tiled = getUnrollAndJamCount(L, SE) || (P && getUnrollAndJamCount(P, SE));
+    // H7c: inside a tiled nest, fully unrolling the innermost loop still pays
+    // when the values it reuses across the parent loop fit the register
+    // budget: TC x (loads whose addresses repeat in every iteration of the
+    // parent) values, kept in registers instead of reloaded (EXP-025).
+    auto ReuseFits = [&]() {
+      if (!RISCVXReg::fullUnrollReuse() || !P || !L->isInnermost())
+        return false;
+      unsigned TC = SE.getSmallConstantTripCount(L);
+      if (!TC)
+        return false;
+      SmallPtrSet<const SCEV *, 16> Reused;
+      for (BasicBlock *BB : L->blocks())
+        for (Instruction &I : *BB)
+          if (auto *Ld = dyn_cast<LoadInst>(&I))
+            if (auto *AR = dyn_cast<SCEVAddRecExpr>(
+                    SE.getSCEV(Ld->getPointerOperand()));
+                AR && AR->getLoop() == L &&
+                SE.isLoopInvariant(AR->getStart(), P) &&
+                SE.isLoopInvariant(AR->getStepRecurrence(SE), P))
+              Reused.insert(AR);
+      uint64_t Live = uint64_t(TC) * Reused.size();
+      uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
+                        RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
+      return !Reused.empty() && Live <= Budget;
+    };
+    if (!Tiled || ReuseFits())
       UP.Threshold = std::max(UP.Threshold, T);
   }
 

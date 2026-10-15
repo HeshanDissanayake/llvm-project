@@ -75,6 +75,14 @@ static cl::opt<unsigned> XRegFullUnroll(
 
 unsigned RISCVXReg::getFullUnrollThreshold() { return XRegFullUnroll; }
 
+static cl::opt<bool> XRegFullUnrollReuse(
+    "riscv-xreg-full-unroll-reuse", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H7c): with -riscv-xreg-full-unroll, also fully unroll the "
+             "innermost loop of a tiled nest when its values reused across "
+             "the parent loop fit the register budget"));
+
+bool RISCVXReg::fullUnrollReuse() { return XRegFullUnrollReuse; }
+
 static cl::opt<unsigned> XRegInlineAgg(
     "riscv-xreg-inline-agg", cl::Hidden, cl::init(0),
     cl::desc("xreg (H7b): inlining bonus for calls passing pointers to the "
