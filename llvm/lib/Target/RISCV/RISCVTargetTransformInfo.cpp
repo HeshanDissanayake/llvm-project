@@ -3136,10 +3136,15 @@ void RISCVTTIImpl::getUnrollingPreferences(
             if (auto *D = dyn_cast<Instruction>(Op); D && !P->contains(D))
               LiveIn.insert(D);
       Live += LiveIn.size();
+      LLVM_DEBUG(dbgs() << "xreg H7c: " << L->getHeader()->getName()
+                        << " live " << Live << " (live-ins " << LiveIn.size()
+                        << ")\n");
       uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
                         RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
       return Live <= Budget;
     };
+    LLVM_DEBUG(dbgs() << "xreg H7: " << L->getHeader()->getName()
+                      << " tiled " << Tiled << "\n");
     if (!Tiled || ReuseFits())
       UP.Threshold = std::max(UP.Threshold, T);
   }
