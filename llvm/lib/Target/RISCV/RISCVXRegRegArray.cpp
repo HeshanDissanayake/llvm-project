@@ -369,7 +369,7 @@ static bool rewriteGlobalArrays(Module &M) {
     uint64_t Base, Elems, Bits;
     if (F.size() != 4 || F[1].getAsInteger(10, Base) || F[2].getAsInteger(10, Elems) ||
         F[3].getAsInteger(10, Bits))
-      report_fatal_error("xreg: bad -riscv-xreg-garrays entry " + S);
+      report_fatal_error(Twine("xreg: bad -riscv-xreg-garrays entry ") + S);
     List.push_back({F[0].str(), Base, Elems, Bits});
   }
   IRBuilder<> B(Ctx);
@@ -381,13 +381,13 @@ static bool rewriteGlobalArrays(Module &M) {
     Type *T = arrayElem(G->getValueType(), N);
     SmallVector<Instruction *, 16> Acc;
     if (!T || N != En.Elems || !globalAccesses(*G, T, Acc))
-      report_fatal_error("xreg: global array " + En.Name + " can't be kept in registers");
+      report_fatal_error(Twine("xreg: global array ") + En.Name + " can't be kept in registers");
     uint64_t Sz = DL.getTypeStoreSize(T);
     for (Instruction *I : Acc) {
       B.SetInsertPoint(I);
       Value *Idx = elementIndex(getLoadStorePointerOperand(I), G, Sz, DL, B);
       if (!Idx)
-        report_fatal_error("xreg: global array " + En.Name + ": bad index");
+        report_fatal_error(Twine("xreg: global array ") + En.Name + ": bad index");
       uint64_t Imm = En.Base;
       if (auto *CI = dyn_cast<ConstantInt>(Idx)) {
         Imm += CI->getSExtValue();
