@@ -3276,6 +3276,43 @@ void RISCVTTIImpl::getUnrollingPreferences(
     };
     if (((!Tiled && Useful()) || ReuseFits()) && FitsICache())
       UP.Threshold = std::max(UP.Threshold, T);
+    // H7d: a loop that steps through a local array whose elements all fit
+    // the register budget may be fully unrolled up to a larger size: after
+    // unrolling SROA keeps the whole array in registers (EXP-032: sha512's
+    // 80-word message schedule needs more than T at 224 registers; at 32
+    // registers it doesn't fit, so nothing changes).
+    auto PromoteFits = [&]() {
+      if (!L->isInnermost())
+        return false;
+      const DataLayout &DL = getDataLayout();
+      uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
+                        RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
+      for (BasicBlock *BB : L->blocks())
+        for (Instruction &I : *BB) {
+          Value *Ptr = getLoadStorePointerOperand(&I);
+          if (!Ptr)
+            continue;
+          auto *AR = dyn_cast<SCEVAddRecExpr>(SE.getSCEV(Ptr));
+          if (!AR || AR->getLoop() != L)
+            continue;
+          auto *U = dyn_cast<SCEVUnknown>(SE.getPointerBase(AR));
+          auto *AI = U ? dyn_cast<AllocaInst>(getUnderlyingObject(U->getValue()))
+                       : nullptr;
+          if (!AI)
+            continue;
+          std::optional<TypeSize> Sz = AI->getAllocationSize(DL);
+          Type *ElTy = getLoadStoreType(&I);
+          if (!Sz || Sz->isScalable() || !ElTy->isSized())
+            continue;
+          uint64_t ElBytes = DL.getTypeStoreSize(ElTy).getFixedValue();
+          if (ElBytes && Sz->getFixedValue() / ElBytes <= Budget)
+            return true;
+        }
+      return false;
+    };
+    if (unsigned T2 = RISCVXReg::getFullUnrollPromoteThreshold())
+      if (!Tiled && PromoteFits() && FitsICache())
+        UP.Threshold = std::max(UP.Threshold, T2);
   }
 
   // xreg (H4c): let LoopUnrollAndJam consider outer loops; the count comes

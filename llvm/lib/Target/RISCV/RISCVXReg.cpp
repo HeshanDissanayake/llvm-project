@@ -102,6 +102,14 @@ static cl::opt<bool> XRegFullUnrollGate(
 
 bool RISCVXReg::fullUnrollGate() { return XRegFullUnrollGate; }
 
+static cl::opt<unsigned> XRegFullUnrollPromote(
+    "riscv-xreg-full-unroll-promote", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H7d): full-unroll size threshold for innermost loops "
+             "stepping through a local array whose elements fit the register "
+             "budget (0 = off)"));
+
+unsigned RISCVXReg::getFullUnrollPromoteThreshold() { return XRegFullUnrollPromote; }
+
 static cl::opt<bool> XRegFullUnrollGateConst(
     "riscv-xreg-full-unroll-gate-const", cl::Hidden, cl::init(false),
     cl::desc("xreg (H14b): with -riscv-xreg-full-unroll-gate, count only "
