@@ -3152,9 +3152,8 @@ void RISCVTTIImpl::getUnrollingPreferences(
               Reused.insert(AR);
       return uint64_t(TC) * Reused.size();
     };
-    auto ReuseFits = [&]() {
-      if (!RISCVXReg::fullUnrollReuse() || !P || !L->isInnermost() ||
-          !ReusedValues(L))
+    auto ReuseFitsBudget = [&]() {
+      if (!P || !L->isInnermost() || !ReusedValues(L))
         return false;
       uint64_t Live = 0;
       for (Loop *S : P->getSubLoops())
@@ -3185,6 +3184,33 @@ void RISCVTTIImpl::getUnrollingPreferences(
                         RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
       return Live <= Budget;
     };
+    auto ReuseFits = [&]() {
+      return RISCVXReg::fullUnrollReuse() && ReuseFitsBudget();
+    };
+    // H14b: full unrolling (H7a) pays only if it makes a local or global
+    // array constant-indexed (SROA/promotion, folded table loads) or creates
+    // values reused across the parent loop that fit the register budget.
+    // Otherwise it only grows the code (EXP-030: heat-3d 19 -> 103 KiB and
+    // xgboost 14 -> 48 KiB with no change in loads/stores).
+    auto Useful = [&]() {
+      if (!RISCVXReg::fullUnrollGate())
+        return true;
+      for (BasicBlock *BB : L->blocks())
+        for (Instruction &I : *BB) {
+          Value *Ptr = getLoadStorePointerOperand(&I);
+          if (!Ptr)
+            continue;
+          auto *AR = dyn_cast<SCEVAddRecExpr>(SE.getSCEV(Ptr));
+          if (!AR || AR->getLoop() != L)
+            continue;
+          const SCEV *Base = SE.getPointerBase(AR);
+          if (auto *U = dyn_cast<SCEVUnknown>(Base))
+            if (isa<AllocaInst>(U->getValue()) ||
+                isa<GlobalVariable>(U->getValue()))
+              return true;
+        }
+      return ReuseFitsBudget();
+    };
     LLVM_DEBUG(dbgs() << "xreg H7: " << L->getHeader()->getName()
                       << " tiled " << Tiled << "\n");
     // H14: the loop nest after unrolling must fit the I-cache budget, or the
@@ -3210,7 +3236,7 @@ void RISCVTTIImpl::getUnrollingPreferences(
       };
       return RISCVXReg::codeBytes(Insts(Top) + Insts(L) * (TC - 1)) <= B;
     };
-    if ((!Tiled || ReuseFits()) && FitsICache())
+    if (((!Tiled && Useful()) || ReuseFits()) && FitsICache())
       UP.Threshold = std::max(UP.Threshold, T);
   }
 

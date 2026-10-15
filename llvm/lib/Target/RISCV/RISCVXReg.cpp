@@ -93,6 +93,14 @@ static cl::opt<unsigned> XRegICachePfx(
              "in percent"));
 
 unsigned RISCVXReg::getICacheBudget() { return XRegICacheBudget; }
+
+static cl::opt<bool> XRegFullUnrollGate(
+    "riscv-xreg-full-unroll-gate", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H14b): -riscv-xreg-full-unroll applies only to loops that "
+             "index a local/global array or create reused values that fit "
+             "the register budget"));
+
+bool RISCVXReg::fullUnrollGate() { return XRegFullUnrollGate; }
 uint64_t RISCVXReg::codeBytes(uint64_t IRInsts) {
   return IRInsts * 4 * (getNumGPRs() > 32 ? XRegICachePfx : 100) / 100;
 }
