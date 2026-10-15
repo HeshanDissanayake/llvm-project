@@ -75,6 +75,19 @@ static cl::opt<unsigned> XRegFullUnroll(
 
 unsigned RISCVXReg::getFullUnrollThreshold() { return XRegFullUnroll; }
 
+static cl::opt<unsigned> XRegInlineAgg(
+    "riscv-xreg-inline-agg", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H7b): inlining bonus for calls passing pointers to the "
+             "caller's local aggregates, if they fit the register budget "
+             "(0 = stock)"));
+static cl::opt<unsigned> XRegInlineAggBudget(
+    "riscv-xreg-inline-agg-budget", cl::Hidden, cl::init(50),
+    cl::desc("xreg (H7b): register budget for -riscv-xreg-inline-agg, in "
+             "percent of -riscv-num-gprs"));
+
+unsigned RISCVXReg::getInlineAggBonus() { return XRegInlineAgg; }
+unsigned RISCVXReg::getInlineAggBudgetPercent() { return XRegInlineAggBudget; }
+
 static cl::opt<bool> XRegUnJAuto(
     "riscv-xreg-unj-auto", cl::Hidden, cl::init(false),
     cl::desc("xreg (H4c): unroll-and-jam outer loops with a count chosen from "

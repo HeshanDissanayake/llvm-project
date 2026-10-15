@@ -163,6 +163,7 @@ public:
 
   /// xreg (H4c): register-aware unroll-and-jam count (-riscv-xreg-unj-auto).
   unsigned getUnrollAndJamCount(Loop *L, ScalarEvolution &SE) const override;
+  unsigned adjustInliningThreshold(const CallBase *CB) const override;
 
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP,
