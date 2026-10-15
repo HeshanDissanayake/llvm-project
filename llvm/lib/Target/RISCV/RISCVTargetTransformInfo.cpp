@@ -3205,7 +3205,7 @@ void RISCVTTIImpl::getUnrollingPreferences(
       auto Insts = [](Loop *X) {
         uint64_t N = 0;
         for (BasicBlock *BB : X->blocks())
-          N += BB->sizeWithoutDebug();
+          N += BB->size(); // debug info is not instructions (debug records)
         return N;
       };
       return RISCVXReg::codeBytes(Insts(Top) + Insts(L) * (TC - 1)) <= B;
