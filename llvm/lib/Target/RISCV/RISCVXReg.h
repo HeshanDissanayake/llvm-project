@@ -46,6 +46,10 @@ unsigned getUnrollAndJamCount();
 /// (-riscv-xreg-sr; added at the vectorizer-start extension point).
 bool scalarRepl();
 
+/// H9: internal clones of external functions for in-module calls, so that
+/// IPRA's no-CSR convention applies (-riscv-xreg-nocsr-clone).
+bool noCSRClone();
+
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
 
@@ -81,6 +85,12 @@ bool pressureHint();
 
 /// xreg (H6): whole-program register globals (RISCVXRegGlobalRegs.cpp).
 class RISCVXRegGlobalRegsPass : public PassInfoMixin<RISCVXRegGlobalRegsPass> {
+public:
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+};
+
+/// xreg (H9): internal no-CSR clones (RISCVXRegNoCSRClone.cpp).
+class RISCVXRegNoCSRClonePass : public PassInfoMixin<RISCVXRegNoCSRClonePass> {
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };

@@ -691,6 +691,9 @@ void RISCVTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
                                          ThinOrFullLTOPhase) {
     if (!RISCVXReg::getGlobalRegNames().empty())
       MPM.addPass(RISCVXRegGlobalRegsPass());
+    // xreg (H9): internal no-CSR clones, after all IR optimization.
+    if (Level != OptimizationLevel::O0 && RISCVXReg::noCSRClone())
+      MPM.addPass(RISCVXRegNoCSRClonePass());
   });
 
   // xreg (H4b): scalar replacement across iterations, before unrolling.

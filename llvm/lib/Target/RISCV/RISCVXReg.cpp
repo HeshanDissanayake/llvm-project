@@ -68,6 +68,13 @@ static cl::opt<bool> XRegScalarRepl(
 
 bool RISCVXReg::scalarRepl() { return XRegScalarRepl; }
 
+static cl::opt<bool> XRegNoCSRClone(
+    "riscv-xreg-nocsr-clone", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H9): give external functions an internal clone for "
+             "in-module calls, so IPRA's no-CSR convention applies"));
+
+bool RISCVXReg::noCSRClone() { return XRegNoCSRClone; }
+
 static cl::opt<bool> XRegUnJAuto(
     "riscv-xreg-unj-auto", cl::Hidden, cl::init(false),
     cl::desc("xreg (H4c): unroll-and-jam outer loops with a count chosen from "

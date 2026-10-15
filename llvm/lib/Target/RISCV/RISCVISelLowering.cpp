@@ -26088,6 +26088,12 @@ SDValue RISCVTargetLowering::LowerCall(CallLoweringInfo &CLI,
   // Add a register mask operand representing the call-preserved registers.
   const TargetRegisterInfo *TRI = Subtarget.getRegisterInfo();
   const uint32_t *Mask = TRI->getCallPreservedMask(MF, CallConv);
+  // xreg (H9): an internal no-CSR clone preserves nothing; IPRA replaces this
+  // conservative mask with the clone's real clobbers when they are known.
+  if (CLI.CB)
+    if (const Function *F = CLI.CB->getCalledFunction())
+      if (F->hasFnAttribute("xreg-nocsr"))
+        Mask = TRI->getNoPreservedMask();
   assert(Mask && "Missing call preserved mask for calling convention");
   Ops.push_back(DAG.getRegisterMask(Mask));
 

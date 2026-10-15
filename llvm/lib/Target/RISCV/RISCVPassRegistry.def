@@ -17,6 +17,7 @@
 #define MODULE_PASS(NAME, CREATE_PASS)
 #endif
 MODULE_PASS("riscv-xreg-gregs", RISCVXRegGlobalRegsPass())
+MODULE_PASS("riscv-xreg-nocsr-clone", RISCVXRegNoCSRClonePass())
 #undef MODULE_PASS
 
 #ifndef FUNCTION_PASS
