@@ -3155,9 +3155,12 @@ void RISCVTTIImpl::getUnrollingPreferences(
     auto ReuseFitsBudget = [&]() {
       if (!P || !L->isInnermost() || !ReusedValues(L))
         return false;
-      uint64_t Live = 0;
-      for (Loop *S : P->getSubLoops())
-        Live += ReusedValues(S);
+      // This loop's reused values plus what is already live in P (live-ins
+      // and P-invariant loads in P's own body, e.g. from a sibling loop that
+      // was unrolled earlier). Rolled siblings are not counted: they are
+      // decided on their own and see this loop's values then (EXP-030b:
+      // counting them blocked pb-atax's first, profitable loop).
+      uint64_t Live = ReusedValues(L);
       // Plus P's live-ins: values computed outside P and used inside it stay
       // in registers across P (e.g. the loads of a sibling loop that was
       // fully unrolled earlier and then hoisted out of P: EXP-027 pb-atax).
