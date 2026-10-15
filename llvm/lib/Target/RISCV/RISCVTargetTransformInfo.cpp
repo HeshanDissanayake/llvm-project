@@ -10,6 +10,7 @@
 #include "RISCVXReg.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/IR/InstIterator.h"
 #include "MCTargetDesc/RISCVMatInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -3066,6 +3067,19 @@ unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
       break;
     }
   if (!PassesAlloca)
+    return 0;
+  // H7b.1: aggregates with volatile accesses (e.g. secure wipes) can't be
+  // promoted, so inlining only adds traffic (EXP-026/028: X25519, ChaCha20).
+  auto HasVolatile = [](const Function *F) {
+    if (!F || F->isDeclaration())
+      return false;
+    for (const Instruction &I : instructions(*F))
+      if ((isa<LoadInst>(I) && cast<LoadInst>(I).isVolatile()) ||
+          (isa<StoreInst>(I) && cast<StoreInst>(I).isVolatile()))
+        return true;
+    return false;
+  };
+  if (HasVolatile(CB->getCaller()) || HasVolatile(CB->getCalledFunction()))
     return 0;
   const DataLayout &DL = getDataLayout();
   uint64_t Bytes = 0;
