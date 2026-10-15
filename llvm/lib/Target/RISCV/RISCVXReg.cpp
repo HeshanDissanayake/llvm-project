@@ -68,6 +68,13 @@ static cl::opt<bool> XRegScalarRepl(
 
 bool RISCVXReg::scalarRepl() { return XRegScalarRepl; }
 
+static cl::opt<unsigned> XRegFullUnroll(
+    "riscv-xreg-full-unroll", cl::Hidden, cl::init(0),
+    cl::desc("xreg (H7): full-unroll size threshold for loops that unroll-"
+             "and-jam won't tile (0 = stock)"));
+
+unsigned RISCVXReg::getFullUnrollThreshold() { return XRegFullUnroll; }
+
 static cl::opt<bool> XRegUnJAuto(
     "riscv-xreg-unj-auto", cl::Hidden, cl::init(false),
     cl::desc("xreg (H4c): unroll-and-jam outer loops with a count chosen from "

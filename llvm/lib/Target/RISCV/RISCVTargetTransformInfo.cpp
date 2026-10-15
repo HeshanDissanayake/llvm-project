@@ -3055,6 +3055,17 @@ void RISCVTTIImpl::getUnrollingPreferences(
   //       would apply to all settings below to enable performance.
 
 
+  // xreg (H7): full unrolling with a larger size limit, so that small arrays
+  // indexed by the loop become constant-indexed and SROA/GVN keep them in
+  // registers (a large register file holds the unrolled live values). Loops
+  // that unroll-and-jam would tile (this loop or its parent) keep the default
+  // limit: fully unrolling them first destroys the tiling (EXP-023 syrk).
+  if (unsigned T = RISCVXReg::getFullUnrollThreshold()) {
+    Loop *P = L->getParentLoop();
+    if (!getUnrollAndJamCount(L, SE) && !(P && getUnrollAndJamCount(P, SE)))
+      UP.Threshold = std::max(UP.Threshold, T);
+  }
+
   // xreg (H4c): let LoopUnrollAndJam consider outer loops; the count comes
   // from getUnrollAndJamCount (register budget), so nothing else changes.
   if (RISCVXReg::unrollAndJamAuto() && !L->isInnermost()) {

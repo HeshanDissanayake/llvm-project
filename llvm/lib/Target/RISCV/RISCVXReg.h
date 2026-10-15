@@ -46,6 +46,10 @@ unsigned getUnrollAndJamCount();
 /// (-riscv-xreg-sr; added at the vectorizer-start extension point).
 bool scalarRepl();
 
+/// H7: full-unroll size threshold for loops that unroll-and-jam won't tile
+/// (-riscv-xreg-full-unroll; 0 = stock).
+unsigned getFullUnrollThreshold();
+
 /// H6: names of globals kept in x255, x254, ... (-riscv-xreg-gregs).
 ArrayRef<std::string> getGlobalRegNames();
 
