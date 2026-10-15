@@ -3115,15 +3115,21 @@ unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
   return Regs <= Budget ? Bonus : 0;
 }
 
-// xreg (H14b): true if \p V points into a local (alloca) or global array:
+// xreg (H14b): true if \p V points into a local (alloca) array or a constant
+// global table:
 // directly, or as a pointer argument that every direct call in the module
 // passes such an array for (up to \p Depth calls up). Used only to judge
 // whether full unrolling pays (constant-indexed local/global arrays can be
 // promoted or folded); arrays behind other pointers (e.g. malloc'ed) can't.
 static bool localOrGlobalArray(const Value *V, unsigned Depth) {
   V = getUnderlyingObject(V);
-  if (isa<AllocaInst>(V) || isa<GlobalVariable>(V))
+  // A local array can be promoted (SROA); a constant global table folds into
+  // immediates once indices are constant. A writable global array stays in
+  // memory either way (EXP-030d: xgboost unrolled with no gain).
+  if (isa<AllocaInst>(V))
     return true;
+  if (auto *G = dyn_cast<GlobalVariable>(V))
+    return G->isConstant();
   auto *A = dyn_cast<Argument>(V);
   if (!A || !Depth)
     return false;
