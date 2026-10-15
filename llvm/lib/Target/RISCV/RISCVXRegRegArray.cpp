@@ -350,7 +350,9 @@ static void reportGlobalArrays(Module &M, ModuleAnalysisManager &AM) {
     }
     errs() << "xreg-garray: " << G.getName() << " " << N << " "
            << (T->isPointerTy() ? 64 : T->getIntegerBitWidth()) << " "
-           << (Ok ? 1 : 0) << " " << W << "\n";
+           << (Ok ? 1 : 0) << " " << W << " " << (G.hasLocalLinkage() ? "I" : "E")
+           << " " << (M.getFunction("main") && !M.getFunction("main")->isDeclaration())
+           << "\n";
   }
 }
 
