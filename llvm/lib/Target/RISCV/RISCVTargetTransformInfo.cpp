@@ -3115,6 +3115,30 @@ unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
   return Regs <= Budget ? Bonus : 0;
 }
 
+// xreg (H14b): true if \p V points into a local (alloca) or global array:
+// directly, or as a pointer argument that every direct call in the module
+// passes such an array for (up to \p Depth calls up). Used only to judge
+// whether full unrolling pays (constant-indexed local/global arrays can be
+// promoted or folded); arrays behind other pointers (e.g. malloc'ed) can't.
+static bool localOrGlobalArray(const Value *V, unsigned Depth) {
+  V = getUnderlyingObject(V);
+  if (isa<AllocaInst>(V) || isa<GlobalVariable>(V))
+    return true;
+  auto *A = dyn_cast<Argument>(V);
+  if (!A || !Depth)
+    return false;
+  bool Any = false;
+  for (const User *U : A->getParent()->users()) {
+    auto *CB = dyn_cast<CallBase>(U);
+    if (!CB || CB->getCalledFunction() != A->getParent())
+      return false; // address taken: unknown callers
+    if (!localOrGlobalArray(CB->getArgOperand(A->getArgNo()), Depth - 1))
+      return false;
+    Any = true;
+  }
+  return Any;
+}
+
 void RISCVTTIImpl::getUnrollingPreferences(
     Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP,
     OptimizationRemarkEmitter *ORE) const {
@@ -3208,8 +3232,7 @@ void RISCVTTIImpl::getUnrollingPreferences(
             continue;
           const SCEV *Base = SE.getPointerBase(AR);
           if (auto *U = dyn_cast<SCEVUnknown>(Base))
-            if (isa<AllocaInst>(U->getValue()) ||
-                isa<GlobalVariable>(U->getValue()))
+            if (localOrGlobalArray(U->getValue(), 3))
               return true;
         }
       return ReuseFitsBudget();
