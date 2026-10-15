@@ -41,6 +41,10 @@
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -48,6 +52,18 @@ using namespace llvm;
 
 STATISTIC(NumPromoted, "Number of local arrays kept in a register block");
 STATISTIC(NumAccesses, "Number of loads/stores turned into xrget/xrset");
+STATISTIC(NumGlobalAccesses, "Number of global-array accesses turned into xrget/xrset");
+
+// H13b: global arrays in registers, program-wide (like register globals).
+static cl::opt<bool> GArrayReport(
+    "riscv-xreg-garray-report", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H13b): print, for every global array, whether all its "
+             "uses in this module allow keeping it in registers, and its "
+             "profile-weighted access count"));
+static cl::list<std::string> GArrays(
+    "riscv-xreg-garrays", cl::Hidden, cl::CommaSeparated,
+    cl::desc("xreg (H13b): name:base:elems:bits,... global arrays kept in "
+             "registers x(base).. (chosen by the driver from the reports)"));
 
 namespace {
 struct Candidate {
@@ -273,12 +289,157 @@ static bool runOnFunction(Function &F, unsigned PoolBegin, unsigned PoolEnd) {
   return Changed;
 }
 
-PreservedAnalyses RISCVXRegRegArrayPass::run(Module &M, ModuleAnalysisManager &) {
+// Scalar element type and count of a (nested) array type, or null.
+static Type *arrayElem(Type *T, uint64_t &N) {
+  N = 1;
+  if (!T->isArrayTy())
+    return nullptr;
+  while (auto *AT = dyn_cast<ArrayType>(T)) {
+    N *= AT->getNumElements();
+    T = AT->getElementType();
+  }
+  if (T->isPointerTy() || (T->isIntegerTy() && T->getIntegerBitWidth() <= 64))
+    return T;
+  return nullptr;
+}
+
+// Loads/stores of G (through GEP instructions or constant GEPs); false if any
+// other use exists or an access has the wrong type.
+static bool globalAccesses(GlobalVariable &G, Type *T,
+                           SmallVectorImpl<Instruction *> &Out) {
+  SmallVector<Value *, 8> Work{&G};
+  while (!Work.empty()) {
+    Value *V = Work.pop_back_val();
+    for (User *U : V->users()) {
+      if (isa<GEPOperator>(U)) {
+        Work.push_back(U);
+      } else if (auto *L = dyn_cast<LoadInst>(U)) {
+        if (L->isVolatile() || L->getType() != T)
+          return false;
+        Out.push_back(L);
+      } else if (auto *S = dyn_cast<StoreInst>(U)) {
+        if (S->isVolatile() || S->getPointerOperand() != V ||
+            S->getValueOperand()->getType() != T)
+          return false;
+        Out.push_back(S);
+      } else {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static void reportGlobalArrays(Module &M, ModuleAnalysisManager &AM) {
+  auto &FAM = AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+  const DataLayout &DL = M.getDataLayout();
+  for (GlobalVariable &G : M.globals()) {
+    uint64_t N;
+    Type *T = arrayElem(G.getValueType(), N);
+    if (!T || N < 2 || N > 224 || G.isThreadLocal())
+      continue;
+    SmallVector<Instruction *, 16> Acc;
+    bool Ok = globalAccesses(G, T, Acc);
+    uint64_t Sz = DL.getTypeStoreSize(T), W = 0;
+    for (Instruction *I : Acc) {
+      IRBuilder<> B(I);
+      if (!elementIndex(getLoadStorePointerOperand(I), &G, Sz, DL, B))
+        Ok = false;
+      auto &BFI = FAM.getResult<BlockFrequencyAnalysis>(*I->getFunction());
+      W += BFI.getBlockProfileCount(I->getParent()).value_or(1);
+    }
+    errs() << "xreg-garray: " << G.getName() << " " << N << " "
+           << (T->isPointerTy() ? 64 : T->getIntegerBitWidth()) << " "
+           << (Ok ? 1 : 0) << " " << W << "\n";
+  }
+}
+
+static bool rewriteGlobalArrays(Module &M) {
+  if (GArrays.empty())
+    return false;
+  LLVMContext &Ctx = M.getContext();
+  const DataLayout &DL = M.getDataLayout();
+  Function *Get = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::riscv_xreg_rget);
+  Function *Set = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::riscv_xreg_rset);
+  struct E { std::string Name; uint64_t Base, Elems, Bits; };
+  SmallVector<E, 8> List;
+  for (StringRef S : GArrays) {
+    SmallVector<StringRef, 4> F;
+    S.split(F, ':');
+    uint64_t Base, Elems, Bits;
+    if (F.size() != 4 || F[1].getAsInteger(10, Base) || F[2].getAsInteger(10, Elems) ||
+        F[3].getAsInteger(10, Bits))
+      report_fatal_error("xreg: bad -riscv-xreg-garrays entry " + S);
+    List.push_back({F[0].str(), Base, Elems, Bits});
+  }
+  IRBuilder<> B(Ctx);
+  for (E &En : List) {
+    GlobalVariable *G = M.getGlobalVariable(En.Name, true);
+    if (!G)
+      continue;
+    uint64_t N;
+    Type *T = arrayElem(G->getValueType(), N);
+    SmallVector<Instruction *, 16> Acc;
+    if (!T || N != En.Elems || !globalAccesses(*G, T, Acc))
+      report_fatal_error("xreg: global array " + En.Name + " can't be kept in registers");
+    uint64_t Sz = DL.getTypeStoreSize(T);
+    for (Instruction *I : Acc) {
+      B.SetInsertPoint(I);
+      Value *Idx = elementIndex(getLoadStorePointerOperand(I), G, Sz, DL, B);
+      if (!Idx)
+        report_fatal_error("xreg: global array " + En.Name + ": bad index");
+      uint64_t Imm = En.Base;
+      if (auto *CI = dyn_cast<ConstantInt>(Idx)) {
+        Imm += CI->getSExtValue();
+        Idx = B.getInt64(0);
+      }
+      if (auto *L = dyn_cast<LoadInst>(I)) {
+        Value *R = B.CreateCall(Get, {Idx, B.getInt64(Imm & 0xff)});
+        L->replaceAllUsesWith(fromI64(R, T, B));
+      } else {
+        B.CreateCall(Set, {toI64(cast<StoreInst>(I)->getValueOperand(), B), Idx,
+                           B.getInt64(Imm & 0xff)});
+      }
+      I->eraseFromParent();
+      ++NumGlobalAccesses;
+    }
+  }
+  // main copies each array's initial value from memory into its block.
+  if (Function *Main = M.getFunction("main"); Main && !Main->isDeclaration()) {
+    B.SetInsertPoint(&*Main->getEntryBlock().getFirstInsertionPt());
+    for (E &En : List) {
+      Type *T = Type::getIntNTy(Ctx, En.Bits);
+      GlobalVariable *G = M.getGlobalVariable(En.Name, true);
+      if (!G)
+        G = new GlobalVariable(M, ArrayType::get(T, En.Elems), false,
+                               GlobalValue::ExternalLinkage, nullptr, En.Name);
+      for (uint64_t K = 0; K < En.Elems; ++K) {
+        Value *P = B.CreateConstInBoundsGEP1_64(T, G, K);
+        Value *V = B.CreateLoad(T, P, En.Name + ".xreg.init");
+        B.CreateCall(Set, {B.CreateZExt(V, B.getInt64Ty()), B.getInt64(0),
+                           B.getInt64((En.Base + K) & 0xff)});
+      }
+    }
+  }
+  return true;
+}
+
+PreservedAnalyses RISCVXRegRegArrayPass::run(Module &M, ModuleAnalysisManager &AM) {
+  if (GArrayReport)
+    reportGlobalArrays(M, AM);
+  bool Changed = rewriteGlobalArrays(M);
   if (!RISCVXReg::regArray())
-    return PreservedAnalyses::all();
+    return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
+  // Local arrays use the registers after the global arrays' blocks.
   unsigned Begin = RISCVXReg::getNumGPRs();
+  for (StringRef S : GArrays) {
+    SmallVector<StringRef, 4> F;
+    S.split(F, ':');
+    uint64_t Base = 0, Elems = 0;
+    if (F.size() == 4 && !F[1].getAsInteger(10, Base) && !F[2].getAsInteger(10, Elems))
+      Begin = std::max<unsigned>(Begin, Base + Elems);
+  }
   unsigned End = 256 - RISCVXReg::getGlobalRegNames().size();
-  bool Changed = false;
   for (Function &F : M)
     Changed |= runOnFunction(F, Begin, End);
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();

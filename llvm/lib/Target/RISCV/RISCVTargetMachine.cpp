@@ -692,8 +692,8 @@ void RISCVTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
     if (!RISCVXReg::getGlobalRegNames().empty())
       MPM.addPass(RISCVXRegGlobalRegsPass());
     // xreg (H13): register-indexed local arrays, after all IR optimization.
-    if (Level != OptimizationLevel::O0 && RISCVXReg::regArray())
-      MPM.addPass(RISCVXRegRegArrayPass());
+    if (Level != OptimizationLevel::O0)
+      MPM.addPass(RISCVXRegRegArrayPass()); // no-op unless its switches are set
     // xreg (H9): internal no-CSR clones, after all IR optimization.
     if (Level != OptimizationLevel::O0 && RISCVXReg::noCSRClone())
       MPM.addPass(RISCVXRegNoCSRClonePass());
