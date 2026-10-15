@@ -3070,13 +3070,26 @@ unsigned RISCVTTIImpl::adjustInliningThreshold(const CallBase *CB) const {
     return 0;
   // H7b.1: aggregates with volatile accesses (e.g. secure wipes) can't be
   // promoted, so inlining only adds traffic (EXP-026/028: X25519, ChaCha20).
+  // Volatile accesses in F or in a function F calls directly (a wipe helper
+  // such as Monocypher's crypto_wipe that isn't inlined yet).
   auto HasVolatile = [](const Function *F) {
+    auto Direct = [](const Function *G) {
+      if (!G || G->isDeclaration())
+        return false;
+      for (const Instruction &I : instructions(*G))
+        if ((isa<LoadInst>(I) && cast<LoadInst>(I).isVolatile()) ||
+            (isa<StoreInst>(I) && cast<StoreInst>(I).isVolatile()))
+          return true;
+      return false;
+    };
     if (!F || F->isDeclaration())
       return false;
+    if (Direct(F))
+      return true;
     for (const Instruction &I : instructions(*F))
-      if ((isa<LoadInst>(I) && cast<LoadInst>(I).isVolatile()) ||
-          (isa<StoreInst>(I) && cast<StoreInst>(I).isVolatile()))
-        return true;
+      if (auto *C = dyn_cast<CallBase>(&I))
+        if (Direct(C->getCalledFunction()))
+          return true;
     return false;
   };
   if (HasVolatile(CB->getCaller()) || HasVolatile(CB->getCalledFunction()))
