@@ -101,6 +101,13 @@ static cl::opt<bool> XRegFullUnrollGate(
              "the register budget"));
 
 bool RISCVXReg::fullUnrollGate() { return XRegFullUnrollGate; }
+
+static cl::opt<bool> XRegFullUnrollGateConst(
+    "riscv-xreg-full-unroll-gate-const", cl::Hidden, cl::init(false),
+    cl::desc("xreg (H14b): with -riscv-xreg-full-unroll-gate, count only "
+             "constant global tables (not writable global arrays)"));
+
+bool RISCVXReg::fullUnrollGateConstOnly() { return XRegFullUnrollGateConst; }
 uint64_t RISCVXReg::codeBytes(uint64_t IRInsts) {
   return IRInsts * 4 * (getNumGPRs() > 32 ? XRegICachePfx : 100) / 100;
 }

@@ -60,6 +60,7 @@ unsigned getFullUnrollThreshold();
 unsigned getICacheBudget();
 /// H14b: full unrolling only where it is useful (-riscv-xreg-full-unroll-gate).
 bool fullUnrollGate();
+bool fullUnrollGateConstOnly();
 uint64_t codeBytes(uint64_t IRInsts);
 /// H7c: also fully unroll the innermost loop of a tiled nest when its reused
 /// values fit the register budget (-riscv-xreg-full-unroll-reuse).

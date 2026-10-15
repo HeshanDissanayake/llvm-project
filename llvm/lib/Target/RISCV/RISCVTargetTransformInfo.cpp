@@ -3129,7 +3129,7 @@ static bool localOrGlobalArray(const Value *V, unsigned Depth) {
   if (isa<AllocaInst>(V))
     return true;
   if (auto *G = dyn_cast<GlobalVariable>(V))
-    return G->isConstant();
+    return G->isConstant() || !RISCVXReg::fullUnrollGateConstOnly();
   auto *A = dyn_cast<Argument>(V);
   if (!A || !Depth)
     return false;
@@ -3228,6 +3228,12 @@ void RISCVTTIImpl::getUnrollingPreferences(
     auto Useful = [&]() {
       if (!RISCVXReg::fullUnrollGate())
         return true;
+      // Unrolling a loop that still contains a loop copies the inner loop's
+      // code for little gain (EXP-030e: xgboost's tree loop around the tree
+      // walk). Nests are unrolled from the inside: once the inner loop is
+      // unrolled, the parent is innermost and judged on its own.
+      if (!L->isInnermost())
+        return false;
       for (BasicBlock *BB : L->blocks())
         for (Instruction &I : *BB) {
           Value *Ptr = getLoadStorePointerOperand(&I);
