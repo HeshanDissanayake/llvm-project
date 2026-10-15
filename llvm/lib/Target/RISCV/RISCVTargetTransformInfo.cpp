@@ -3126,6 +3126,17 @@ void RISCVTTIImpl::getUnrollingPreferences(
       uint64_t Live = 0;
       for (Loop *S : P->getSubLoops())
         Live += ReusedValues(S);
+      // Plus loads already in P's own body (e.g. from a sibling loop that
+      // was fully unrolled before this one) whose address is P-invariant:
+      // they will be hoisted out of P and stay live across it.
+      SmallPtrSet<const Value *, 32> Own;
+      for (BasicBlock *BB : P->blocks())
+        if (none_of(P->getSubLoops(), [&](Loop *S) { return S->contains(BB); }))
+          for (Instruction &I : *BB)
+            if (auto *Ld = dyn_cast<LoadInst>(&I))
+              if (SE.isLoopInvariant(SE.getSCEV(Ld->getPointerOperand()), P))
+                Own.insert(Ld->getPointerOperand());
+      Live += Own.size();
       uint64_t Budget = uint64_t(RISCVXReg::getNumGPRs()) *
                         RISCVXReg::getUnrollAndJamBudgetPercent() / 100;
       return Live <= Budget;
